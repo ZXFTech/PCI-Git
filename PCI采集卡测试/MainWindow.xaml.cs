@@ -43,10 +43,14 @@ namespace PCI
 
             DataPropertyList.Add(ZeroProperty);
             DataPropertyList.Add(SacnFrequency);
-            DataPropertyList.Add(LinearTimeAvaliability);
+            DataPropertyList.Add(TimeUtilization);
             DataPropertyList.Add(EffectiveAngle);
             DataPropertyList.Add(SpeedUniformity);
-
+            TextBoxList.Add(TBLZero);
+            TextBoxList.Add(TBLScanFreq);
+            TextBoxList.Add(TBLTimeUtilization);
+            TextBoxList.Add(TBLEffectiveAngle);
+            TextBoxList.Add(TBLSpeedUniformity);
             InitDevice();
             //TData = new TestData();
         }
@@ -89,6 +93,208 @@ namespace PCI
         }
         #endregion
 
+        #region 波形采集
+        //滤波权重
+        public int MeanFilteWeight = 20;
+        public int MedianFilteWeight = 20;
+        public int DownsampleWeight = 100;
+        //波形采集线程
+        Thread ThreadCollectWave;
+
+        /// <summary>
+        /// 从采集卡获取波形
+        /// </summary>
+        public void WaveCollect()
+        {
+            //初始化
+            para_init.lSelDataSrc = m_bADcnt;				                                                                //0-  AD数据源  1-计数器数据源			
+            para_init.TriggerDelay = m_nTrigDelay;				                                                            //仅延时触发有效
+            para_init.TriggerMode = (long)EmTriggerMode.TRIG_MODE_CONTINUE;	                                                //触发模式
+            para_init.TriggerSource = (long)EmTriggerSourse.TRIG_SRC_EXT_FALLING;	                                        //触发源
+            para_init.TriggerLength = m_nTrigLen;				                                                            //触发长度
+            para_init.TriggerLevel = (long)(m_fLevel * 4096.0 / 5.0);                                                       //触发电平，仅触发源是模拟触发有效
+            para_init.lChCnt = m_lChcnt;						                                                            //通道数 当前设置为2 	
+            para_init.lADFmt = (long)EmADFormat.ADFMT_2SBIN;						                                        //默认直接二进制输出
+
+            //初始化采样钟
+            if (!DllImport.PCI2168_initADCLK(hdl, (long)EmADClkSel.ADCLK_INT, 1))
+            {
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "初始化采样钟失败！" });
+                return;
+            }
+
+            if (!DllImport.PCI2168_initAD(hdl, ref para_init))
+            {
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "初始化设备失败！" });
+                return;
+            }
+
+            //根据采集次数设置循环次数
+            for (int times = 0; times < SamplingTimes; times++)
+            {
+                //初始化四个数组
+                Waveform CH1 = new Waveform(1d / 10000000d, 0, "Origin");
+                Waveform CH2 = new Waveform(1d / 10000000d, 0, "Origin");
+                Waveform CH3 = new Waveform(1d / 10000000d, 0, "Origin");
+                Waveform CH4 = new Waveform(1d / 10000000d, 0, "Origin");
+                TargetWave = new Waveform(1d / 10000000d, 0, "Origin");
+                //将四个波形数组代入波形数组List
+                WaveList[0] = CH1;
+                WaveList[1] = CH2;
+                WaveList[2] = CH3;
+                WaveList[3] = CH4;
+                ulong sicnt = (ulong)m_nScnt * 10000;                                                                            //每个通道采集的点数
+
+                sicnt *= (ulong)para_init.lChCnt;                                                                           //每个通道采集的样点
+
+                //由于读取函数有最大读取要求，分多次读取数据
+                int read_cnt = 0;
+                ulong read_len = 0;
+                bool isdivisible = false;
+                if ((sicnt % Constants.READ_MAX_LENGTH) == 0)//如果读取的长度，刚好是最大允许读取长度的整数倍
+                {
+                    read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH);
+                    isdivisible = true;
+                }
+                else
+                {
+                    read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH) + 1;
+                }
+
+                for (int i = 0; i < read_cnt; i++)
+                {
+                    if (i == (read_cnt - 1))
+                    {
+                        if (isdivisible)
+                        {
+                            read_len = Constants.READ_MAX_LENGTH;
+                        }
+                        else
+                        {
+                            read_len = sicnt % Constants.READ_MAX_LENGTH;
+                        }
+                    }
+                    else
+                    {
+                        read_len = Constants.READ_MAX_LENGTH;
+                    }
+
+                    ushort[] inBuffer = new ushort[read_len];   //分配内存
+
+                    //等待缓存钟数据量达到要求
+                    bufcnt = DllImport.PCI2168_GetBufCnt(hdl);
+                    //Thread.Sleep(50);
+                    while (bufcnt < (int)read_len)
+                    {
+                        bufcnt = DllImport.PCI2168_GetBufCnt(hdl);
+                        Thread.Sleep(20);
+                    }
+                    Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "缓存钟数据长度：" + bufcnt + "\n 期望读取长度：" + read_len + "\n总长度：" + sicnt + "\n采集次数：" + read_cnt });
+
+                    ulong bBufOver = 0;
+                    if (DllImport.PCI2168_ReadAD(hdl, inBuffer, read_len, ref bBufOver))
+                    {
+                        int SingleChLength = (int)((long)read_len / para_init.lChCnt) - 1;
+
+                        for (int n = 0; n < SingleChLength; n++)
+                        {
+                            //V1[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n]-32768;
+                            //V2[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n + 1]-32768;
+                            //V1[n + (int)Constants.READ_MAX_LENGTH / para_init.lChCnt * i] = inBuffer[para_init.lChCnt * n];
+                            for (int m = 0; m < para_init.lChCnt; m++)
+                            {
+                                WaveList[m].Add(inBuffer[para_init.lChCnt * n + m]);
+                            }
+                        }
+                        CH5 = inBuffer;
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+
+                OutputFile(CH1, "CH1Protype");
+                OutputFile(CH2, "CH2Protype");
+
+                TargetWave = ProcessWave(CH1, CH2);
+
+                //求导
+                DerivatedWave = waveProcesser.Derivative(TargetWave, out Zero);
+
+                LinearWave = new Waveform();
+                string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
+                //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), new object[] { "线性度为" + TBLinear });
+                double linear = double.Parse(Linear);
+                LinearArray = waveProcesser.CalculateLinearArea(DerivatedWave, linear);
+
+                //计算时间利用率和速度均匀性
+                TimeUtilizationList = waveProcesser.CalculateTimeUtilizationAndSpeedUniformity(LinearArray,DerivatedWave,out List<double> SpeedUnifomitylist);
+                SpeedUniformityList = SpeedUnifomitylist;
+                TimeUtilization = TimeUtilizationList.Sum() / TimeUtilizationList.Count;
+                SpeedUniformity = SpeedUniformityList.Sum() / SpeedUniformityList.Count;
+                //计算有效摆角
+
+                #region 对导数部分处理
+                #region 计算零点和周期
+                List<double> periodArray = new List<double>();
+                if (Zero.Length != 0)
+                {
+                    for (int i = 0; i < Zero.Length; i++)
+                    {
+                        if (Zero[i]._value == 1)
+                        {
+                            periodArray.Add(i);
+                        }
+                    }
+                }
+
+                double PeriodSum = 0;
+                double PeriodTime = 0;
+                for (int i = 1; i < periodArray.Count; i++)
+                {
+                    PeriodSum += (periodArray[i] - periodArray[i - 1]);
+                    ListFrequency.Add(1 / ((periodArray[i] - periodArray[i - 1]) * 2 * Zero.TimeSpan));
+                    PeriodTime++;
+                }
+                SacnFrequency = 1 / (PeriodSum / (PeriodTime / 2) * Zero.TimeSpan);
+
+                #endregion
+                #endregion
+
+                ////更新过零特性TBL，暂时没有StandardWave所以先屏蔽。
+                TBLZero.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLZero, "0" });
+                TBLScanFreq.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLScanFreq, SacnFrequency.ToString("N2") + "Hz" });
+                TBLTimeUtilization.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLTimeUtilization, TimeUtilization.ToString()});
+                TBLEffectiveAngle.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLEffectiveAngle, SacnFrequency.ToString("N2")});
+                TBLSpeedUniformity.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLSpeedUniformity, SpeedUniformity.ToString()});
+
+                OutputFile(TargetWave, "TargetWave");
+                OutputFile(DerivatedWave, "DerivatedWave");
+
+                if (isAngle)
+                {
+                    DrawingWave = TargetWave;
+                }
+                else
+                {
+                    DrawingWave = DerivatedWave;
+                }
+                UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
+
+                SaveExcel();
+
+
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "第" + (times + 1) + "次采集完成！\n" + "频率为" + SacnFrequency.ToString() });
+                if (SamplingTimes != 1)
+                {
+                    //时间间隔
+                    Thread.Sleep(CollectTimeSpan * 1000 * 60);
+                }
+            }
+        }
+        #endregion
+
         #region 波形绘制
         //当前正在绘制的波形
         Waveform DrawingWave;
@@ -103,13 +309,6 @@ namespace PCI
         {
             if (Vwave != null && Vwave.Length != 0)
             {
-                LinearWave = new Waveform();
-
-                string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
-                //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), new object[] { "线性度为" + TBLinear });
-                double linear = double.Parse(Linear);
-                LinearArray = waveProcesser.CalculateLinearArea(Vwave, linear);
-
                 double TopRange = 0;
 
                 //清空之前的数据
@@ -303,196 +502,6 @@ namespace PCI
         #endregion
         #endregion
 
-        #region 波形采集
-        //滤波权重
-        public int MeanFilteWeight = 20;
-        public int MedianFilteWeight = 20;
-        public int DownsampleWeight = 100;
-        //波形采集线程
-        Thread ThreadCollectWave;
-
-        /// <summary>
-        /// 从采集卡获取波形
-        /// </summary>
-        public void WaveCollect()
-        {
-            //初始化
-            para_init.lSelDataSrc = m_bADcnt;				                                                                //0-  AD数据源  1-计数器数据源			
-            para_init.TriggerDelay = m_nTrigDelay;				                                                            //仅延时触发有效
-            para_init.TriggerMode = (long)EmTriggerMode.TRIG_MODE_CONTINUE;	                                                //触发模式
-            para_init.TriggerSource = (long)EmTriggerSourse.TRIG_SRC_EXT_FALLING;	                                        //触发源
-            para_init.TriggerLength = m_nTrigLen;				                                                            //触发长度
-            para_init.TriggerLevel = (long)(m_fLevel * 4096.0 / 5.0);                                                       //触发电平，仅触发源是模拟触发有效
-            para_init.lChCnt = m_lChcnt;						                                                            //通道数 当前设置为2 	
-            para_init.lADFmt = (long)EmADFormat.ADFMT_2SBIN;						                                        //默认直接二进制输出
-
-            //初始化采样钟
-            if (!DllImport.PCI2168_initADCLK(hdl, (long)EmADClkSel.ADCLK_INT, 1))
-            {
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "初始化采样钟失败！" });
-                return;
-            }
-
-            if (!DllImport.PCI2168_initAD(hdl, ref para_init))
-            {
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "初始化设备失败！" });
-                return;
-            }
-
-            //根据采集次数设置循环次数
-            for (int times = 0; times < SamplingTimes; times++)
-            {
-                //初始化四个数组
-                Waveform CH1 = new Waveform(1d / 10000000d,0,"Origin");
-                Waveform CH2 = new Waveform(1d / 10000000d, 0, "Origin");
-                Waveform CH3 = new Waveform(1d / 10000000d, 0, "Origin");
-                Waveform CH4 = new Waveform(1d / 10000000d, 0, "Origin");
-                TargetWave = new Waveform(1d / 10000000d, 0, "Origin");
-                //将四个波形数组代入波形数组List
-                WaveList[0] = CH1;
-                WaveList[1] = CH2;
-                WaveList[2] = CH3;
-                WaveList[3] = CH4;
-                ulong sicnt = (ulong)m_nScnt * 10000;                                                                            //每个通道采集的点数
-
-                sicnt *= (ulong)para_init.lChCnt;                                                                           //每个通道采集的样点
-
-                //由于读取函数有最大读取要求，分多次读取数据
-                int read_cnt = 0;
-                ulong read_len = 0;
-                bool isdivisible = false;
-                if ((sicnt % Constants.READ_MAX_LENGTH) == 0)//如果读取的长度，刚好是最大允许读取长度的整数倍
-                {
-                    read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH);
-                    isdivisible = true;
-                }
-                else
-                {
-                    read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH) + 1;
-                }
-
-                for (int i = 0; i < read_cnt; i++)
-                {
-                    if (i == (read_cnt - 1))
-                    {
-                        if (isdivisible)
-                        {
-                            read_len = Constants.READ_MAX_LENGTH;
-                        }
-                        else
-                        {
-                            read_len = sicnt % Constants.READ_MAX_LENGTH;
-                        }
-                    }
-                    else
-                    {
-                        read_len = Constants.READ_MAX_LENGTH;
-                    }
-
-                    ushort[] inBuffer = new ushort[read_len];   //分配内存
-
-                    //等待缓存钟数据量达到要求
-                    bufcnt = DllImport.PCI2168_GetBufCnt(hdl);
-                    //Thread.Sleep(50);
-                    while (bufcnt < (int)read_len)
-                    {
-                        bufcnt = DllImport.PCI2168_GetBufCnt(hdl);
-                        Thread.Sleep(20);
-                    }
-                    Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "缓存钟数据长度：" + bufcnt + "\n 期望读取长度：" + read_len + "\n总长度：" + sicnt + "\n采集次数：" + read_cnt });
-
-                    ulong bBufOver = 0;
-                    if (DllImport.PCI2168_ReadAD(hdl, inBuffer, read_len, ref bBufOver))
-                    {
-                        int SingleChLength = (int)((long)read_len / para_init.lChCnt) - 1;
-
-                        for (int n = 0; n < SingleChLength; n++)
-                        {
-                            //V1[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n]-32768;
-                            //V2[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n + 1]-32768;
-                            //V1[n + (int)Constants.READ_MAX_LENGTH / para_init.lChCnt * i] = inBuffer[para_init.lChCnt * n];
-                            for (int m = 0; m < para_init.lChCnt; m++)
-                            {
-                                WaveList[m].Add(inBuffer[para_init.lChCnt * n + m]);
-                            }
-                        }
-                        CH5 = inBuffer;
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-
-                OutputFile(CH1, "CH1Protype");
-                OutputFile(CH2, "CH2Protype");
-
-                TargetWave = ProcessWave(CH1, CH2);
-
-                //求导
-                DerivatedWave = waveProcesser.Derivative(TargetWave, out Zero);
-
-                #region 对导数部分处理
-                #region 计算零点和周期
-                List<double> periodArray = new List<double>();
-                if (Zero.Length != 0)
-                {
-                    for (int i = 0; i < Zero.Length; i++)
-                    {
-                        if (Zero[i]._value == 1)
-                        {
-                            periodArray.Add(i);
-                        }
-                    }
-                }
-
-                double PeriodSum = 0;
-                double PeriodTime = 0;
-                for (int i = 1; i < periodArray.Count; i++)
-                {
-                    PeriodSum += (periodArray[i] - periodArray[i - 1]);
-                    ListFrequency.Add(1 / ((periodArray[i] - periodArray[i - 1]) * 2 * Zero.TimeSpan));
-                    PeriodTime++;
-                }
-                Frequency = 1 / (PeriodSum / (PeriodTime / 2) * Zero.TimeSpan);
-
-                #endregion
-                #endregion
-
-                ////更新过零特性TBL，暂时没有StandardWave所以先屏蔽。
-                TBLZero.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLZero, "0" });
-                TBLScanFreq.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLScanFreq, Frequency.ToString("N2") + "Hz" });
-                TBLTimeUtilization.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLSpeedUniformity, Frequency.ToString("N2") + "Hz" });
-                TBLAvailableAngle.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLAvailableAngle, Frequency.ToString("N2") + "Hz" });
-                TBLSpeedUniformity.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLSpeedUniformity, Frequency.ToString("N2") + "Hz" });
-
-
-                OutputFile(TargetWave, "TargetWave");
-                OutputFile(DerivatedWave, "DerivatedWave");
-
-                if (isAngle)
-                {
-                    DrawingWave = TargetWave;
-                }
-                else
-                {
-                    DrawingWave = DerivatedWave;
-                }
-                UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves),DrawingWave);
-
-                SaveExcel();
-
-
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "第" + (times + 1) + "次采集完成！\n" + "频率为" + Frequency.ToString() });
-                if (SamplingTimes!=1)
-                {
-                    //时间间隔
-                    Thread.Sleep(CollectTimeSpan * 1000 * 60);
-                }
-            }
-        }
-        #endregion
-
         #region 波形处理部分
         /// <summary>
         /// 通过输入CH1和CH2的波形，处理出原始波形并计算出目标波形
@@ -588,35 +597,48 @@ namespace PCI
 
             List<string[]> contentList = new List<string[]>
             {
-                new string[] { "产品编号", "零位", "扫描频率", "线性段时间利用率" },
+                new string[] { "产品编号", "零位", "扫描频率", "线性段时间利用率" ,"有效摆角","速度均匀性"},
                 new string[] { (string)TBProducerNum.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus),TBProducerNum)},
                 new string[] { "测量时间" },
                 new string[] { NowDay + NowTime }
             };
-            string[] SubTitle = new string[] { "标准-从零点起始", "测量值-按零点起始", "△t", "标准-初始为25HZ", "测量", "偏差", "线性段/周期" };
+            string[] SubTitle = new string[] { "标准-从零点起始", "测量值-按零点起始", "△t", "标准-初始为25HZ", "测量", "偏差", "线性段1时间","时间利用率","线性段2时间","时间利用率","有效摆角1","有效摆角","速度均匀性1","速度均匀性2" };
 
 
             #region 数据记录表
             #region 填写表头
             //第一行
             IRow thisrow = DataworkSheet.CreateRow(0);
+            //产品编号——1列
             ICell thiscell1 = thisrow.CreateCell(0);
             thiscell1.CellStyle = style;
             thiscell1.SetCellValue(contentList[0][0]);
+            //零位——3列
             ICell thiscell2 = thisrow.CreateCell(1);
             thiscell2.CellStyle = style;
             thiscell2.SetCellValue(contentList[0][1]);
+            //扫描频率——3列
             ICell thiscell3 = thisrow.CreateCell(4);
             thiscell3.CellStyle = style;
             thiscell3.SetCellValue(contentList[0][2]);
+            //线性段时间利用率——4列
             ICell thiscell4 = thisrow.CreateCell(7);
             thiscell4.CellStyle = style;
             thiscell4.SetCellValue(contentList[0][3]);
+            //有效摆角——2列
+            ICell thiscell5 = thisrow.CreateCell(11);
+            thiscell5.CellStyle = style;
+            thiscell5.SetCellValue(contentList[0][4]);
+            //速度均匀性——2列
+            ICell thiscell6 = thisrow.CreateCell(13);
+            thiscell6.CellStyle = style;
+            thiscell6.SetCellValue(contentList[0][5]);
 
-            for (int i = 0; i < 3; i++)
-            {
-                SetCellRangeAddress(DataworkSheet, 0, 0, 3 * i + 1, 3 * i + 3);
-            }
+            SetCellRangeAddress(DataworkSheet, 0, 0, 1, 3);
+            SetCellRangeAddress(DataworkSheet, 0, 0, 4, 6);
+            SetCellRangeAddress(DataworkSheet, 0, 0, 7, 10);
+            SetCellRangeAddress(DataworkSheet, 0, 0, 11, 12);
+            SetCellRangeAddress(DataworkSheet, 0, 0, 13, 14);
 
             //第一列
             for (int i = 1; i < contentList.Count; i++)
@@ -645,7 +667,7 @@ namespace PCI
             differFreq = waveProcesser.CalculateDiffer(25, CalculatedFreq);
             #endregion
 
-            //添加数据
+            //添加零位数据
             for (int i = 0; i < differZero.Count; i++)
             {
                 IRow DataRow = DataworkSheet.GetRow(i + 2);
@@ -665,6 +687,7 @@ namespace PCI
                 DataDifferZero.CellStyle = style;
             }
 
+            //添加扫描频率数据
             for (int i = 0; i < differFreq.Count; i++)
             {
                 IRow DataRow = DataworkSheet.GetRow(i + 2);
@@ -673,9 +696,9 @@ namespace PCI
                     DataRow = DataworkSheet.CreateRow(i + 2);
                 }
 
-                ICell DataDofferZero = DataRow.CreateCell(4);
-                DataDofferZero.SetCellValue(25);
-                DataDofferZero.CellStyle = style;
+                ICell DataDifferFreq = DataRow.CreateCell(4);
+                DataDifferFreq.SetCellValue(25);
+                DataDifferFreq.CellStyle = style;
                 ICell DataStandardFreq = DataRow.CreateCell(5);
                 DataStandardFreq.SetCellValue(CalculatedFreq[i]);
                 DataStandardFreq.CellStyle = style;
@@ -683,6 +706,68 @@ namespace PCI
                 DataCalculateFreq.SetCellValue(differFreq[i]);
                 DataCalculateFreq.CellStyle = style;
             }
+            //添加时间利用率数据
+            for (int i = 0; i < TimeUtilizationList.Count; i++)
+            {
+                IRow DataRow = DataworkSheet.GetRow(i + 2);
+                if (DataRow == null)
+                {
+                    DataRow = DataworkSheet.CreateRow(i + 2);
+                }
+
+                ICell LinearTime1 = DataRow.CreateCell(7);
+                LinearTime1.SetCellValue(TimeUtilizationList[i]);
+                LinearTime1.CellStyle = style;
+                ICell TimeUtilization1 = DataRow.CreateCell(8);
+                TimeUtilization1.SetCellValue(TimeUtilizationList[i]);
+                TimeUtilization1.CellStyle = style;
+                ICell LinearTime2 = DataRow.CreateCell(9);
+                LinearTime2.SetCellValue(TimeUtilizationList[i]);
+                LinearTime2.CellStyle = style;
+                ICell TimeUtilization2 = DataRow.CreateCell(10);
+                TimeUtilization2.SetCellValue(TimeUtilizationList[i]);
+                TimeUtilization2.CellStyle = style;
+            }
+            ////添加有效摆角数据——未完成
+            //for (int i = 0; i < SpeedUniformityList.Count; i += 2)
+            //{
+            //    IRow DataRow = DataworkSheet.GetRow(i + 2);
+            //    if (DataRow == null)
+            //    {
+            //        DataRow = DataworkSheet.CreateRow(i + 2);
+            //    }
+
+            //    ICell LinearTime1 = DataRow.CreateCell(11);
+            //    LinearTime1.SetCellValue(25);
+            //    LinearTime1.CellStyle = style;
+            //    ICell TimeUtilization1 = DataRow.CreateCell(12);
+            //    TimeUtilization1.SetCellValue(TimeUtilizationList[i]);
+            //    TimeUtilization1.CellStyle = style;
+            //}
+            //添加速度均匀性数据
+            int m = 2;
+            for (int i = 0; i < SpeedUniformityList.Count; i += 2)
+            {
+                IRow DataRow = DataworkSheet.GetRow(m);
+                if (DataRow == null)
+                {
+                    DataRow = DataworkSheet.CreateRow(m);
+                    m++;
+                }
+                if (i<SpeedUniformityList.Count)
+                {
+                    ICell SpeedUniformity1 = DataRow.CreateCell(13);
+                    SpeedUniformity1.SetCellValue(SpeedUniformityList[i]);
+                    SpeedUniformity1.CellStyle = style;
+                }
+                if ((i+1)<SpeedUniformityList.Count)
+                {
+                    ICell SpeedUniformity2 = DataRow.CreateCell(14);
+                    SpeedUniformity2.SetCellValue(SpeedUniformityList[i + 1]);
+                    SpeedUniformity2.CellStyle = style;
+                }
+            }
+
             #endregion
 
             #region 原始波形表
@@ -709,7 +794,7 @@ namespace PCI
             #endregion
 
             NowDay = DateTime.Now.ToString("yyyyMMdd");
-            NowTime = DateTime.Now.ToString("hhmmss");
+            NowTime = DateTime.Now.ToString("HHmmss");
             Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), FilePath);
             string ExcelPath = System.IO.Path.Combine(FilePath, NowDay);
             if (!Directory.Exists(ExcelPath))
@@ -768,6 +853,13 @@ namespace PCI
                 TargetWave = ReadExcelWave(workBook);
                 TargetWave.Type = "Origin";
                 DerivatedWave = waveProcesser.Derivative(TargetWave,out Waveform Zero);
+
+                LinearWave = new Waveform();
+
+                string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
+                double linear = double.Parse(Linear);
+                LinearArray = waveProcesser.CalculateLinearArea(DerivatedWave, linear);
+
                 if (isAngle)
                 {
                     DrawingWave = TargetWave;
@@ -779,10 +871,11 @@ namespace PCI
                 UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
 
                 Array DataPropertyArray = Enum.GetValues(typeof(DataProperty));
-                //for (int i = 0; i < DataPropertyArray.Length; i++)
-                //{
-                //    DataPropertyList[i] = ReadExcelData(workBook, (DataProperty)DataPropertyArray.GetValue(i));
-                //}
+                for (int i = 0; i < DataPropertyArray.Length; i++)
+                {
+                    DataPropertyList[i] = ReadExcelData(workBook, (DataProperty)DataPropertyArray.GetValue(i));
+                    TextBoxList[i].Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus),new object[] { TextBoxList[i], DataPropertyList[i].ToString() });
+                }
 
             }
             else
@@ -842,6 +935,7 @@ namespace PCI
         public double ReadExcelData(IWorkbook workBook, DataProperty dataProperty)
         {
             int DataColumn;
+            bool isSpeedUniformity = false;
             switch (dataProperty)
             {
                 case DataProperty.ZeroProperty:
@@ -849,41 +943,56 @@ namespace PCI
                     DataColumn = 3;
                     break;
                 case DataProperty.SacnFrequency:
-                    //读取零位 按零起始 第六列
-                    DataColumn = 6;
+                    //读取扫描频率 按零起始 第六列
+                    DataColumn = 5;
                     break;
                 case DataProperty.LinearTimeAvaliability:
-                    //读取零位 按零起始 第八列
+                    //读取时间利用率 按零起始 第八列
                     DataColumn = 8;
                     break;
                 case DataProperty.EffectiveAngle:
-                    //读取零位 按零起始 第十二列
+                    //读取有效摆角 按零起始 第十二列
                     DataColumn = 12;
                     break;
                 case DataProperty.SpeedUniformity:
-                    //读取零位 按零起始 第十五列
-                    DataColumn = 15;
+                    //读取速度均匀性 按零起始 第十五列
+                    DataColumn = 13;
+                    isSpeedUniformity = true;
                     break;
                 default:
                     return 0;
             }
             double ReadDataProperty = 0;
-            int ReadDataPropertyNum = 0;
+            double ReadDataPropertyNum = 0;
             ISheet DataSheet = workBook.GetSheet("数据记录");
             IRow row;
-            for (int i = 0; i < DataSheet.LastRowNum; i++)
+            for (int i = 2; i < DataSheet.LastRowNum; i++)
             {
                 row = DataSheet.GetRow(i);
                 if (row != null)
                 {
-                    if (double.TryParse(row.GetCell(DataColumn).ToString(), out double result))
+                    if (row.GetCell(DataColumn)!=null)
                     {
-                        ReadDataProperty += result;
-                        ReadDataProperty++;
+                        if (double.TryParse(row.GetCell(DataColumn).ToString(), out double result))
+                        {
+                            ReadDataProperty += result;
+                            ReadDataPropertyNum++;
+                        }
+                    }
+                    if (isSpeedUniformity)
+                    {
+                        if (row.GetCell(DataColumn) != null)
+                        {
+                            if (double.TryParse(row.GetCell(DataColumn+1).ToString(), out double result))
+                            {
+                                ReadDataProperty += result;
+                                ReadDataPropertyNum++;
+                            }
+                        }
                     }
                 }
             }
-            return ReadDataProperty / ReadDataProperty;
+            return ReadDataProperty / ReadDataPropertyNum;
         }
         #endregion
         #endregion
@@ -892,13 +1001,18 @@ namespace PCI
         #region 波形相关参数
         //产品编号
         string ProducerName = "";
-
+        List<TextBox> TextBoxList = new List<TextBox>();
         List<double> DataPropertyList = new List<double>();
         double ZeroProperty = 0;
         double SacnFrequency = 0;
-        double LinearTimeAvaliability = 0;
+        double TimeUtilization = 0;
         double EffectiveAngle = 0;
         double SpeedUniformity = 0;
+        List<double> ZeroPropertyList;
+        List<double> TimeUtilizationList;
+        List<double> SpeedUniformityList;
+        List<double> EffectiveAngleList;
+        List<double> ListFrequency = new List<double>();
         #endregion
 
         #region 波形相关属性
@@ -990,9 +1104,6 @@ namespace PCI
         int SingleTime = 10;
         //采集次数
         int SamplingTimes = 1;
-        //周期
-        double Frequency = 0;
-        List<double> ListFrequency = new List<double>();
         #endregion
 
         #endregion
@@ -1165,7 +1276,7 @@ namespace PCI
                 else
                 {
                     //获取采集时长
-                    m_nScnt = Convert.ToInt32(TBSingleTime.Text);
+                    m_nScnt = num;
                 }
             }
             catch (Exception ex)
@@ -1204,12 +1315,14 @@ namespace PCI
                 else
                 {
                     //获取采集间隔
-                    CollectTimeSpan = Convert.ToInt32(TBTimeSpan.Text);
+                    CollectTimeSpan = num;
+                TBTimeSpan.SelectionStart = TBTimeSpan.Text.Length;
                 }
             }
             catch (Exception)
             {
-
+                TBTimeSpan.Text = CollectTimeSpan.ToString();
+                Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), e.ToString());
             }
         }
         #endregion
@@ -1226,36 +1339,31 @@ namespace PCI
 
         private void TBSamplingTimes_TextChanged(object sender, TextChangedEventArgs e)
         {
-            Regex rgx = new Regex(@"\d+");
-            var matchtext = rgx.Matches(TBSamplingTimes.Text);
-            if (matchtext != null && matchtext.Count != 0)
+            try
             {
-                TBSamplingTimes.Text = matchtext[0].Value;
-            }
-            else
-            {
-                TBSamplingTimes.Text = SamplingTimes.ToString();
-            }
-            if (int.TryParse(TBSamplingTimes.Text, out int result))
-            {
-                int num = result;
-
-                if (num < SamplingTimesLowerLimit)
+                int num = Convert.ToInt32(TBSamplingTimes.Text);
+                if (int.TryParse(TBSamplingTimes.Text, out int result))
                 {
-                    MessageBox.Show("输入超出范围！\n单次最大时间：" + SamplingTimesUpperLimit + "\n单次最小时间：" + SamplingTimesLowerLimit);
-                    TBSamplingTimes.Text = SamplingTimesLowerLimit.ToString();
-                }
-                else if (num > SingleTimeUpperLimit)
-                {
-                    MessageBox.Show("输入超出范围！\n单次最大时间：" + SamplingTimesUpperLimit + "\n单次最小时间：" + SamplingTimesLowerLimit);
-                    TBSamplingTimes.Text = SamplingTimesUpperLimit.ToString();
-                }
-                else
-                {
-                    SamplingTimes = num;
+                    if (num < SamplingTimesLowerLimit)
+                    {
+                        MessageBox.Show("输入超出范围！\n单次最大时间：" + SamplingTimesUpperLimit + "\n单次最小时间：" + SamplingTimesLowerLimit);
+                        TBSamplingTimes.Text = SamplingTimesLowerLimit.ToString();
+                    }
+                    else if (num > SingleTimeUpperLimit)
+                    {
+                        MessageBox.Show("输入超出范围！\n单次最大时间：" + SamplingTimesUpperLimit + "\n单次最小时间：" + SamplingTimesLowerLimit);
+                        TBSamplingTimes.Text = SamplingTimesUpperLimit.ToString();
+                    }
+                    else
+                    {
+                        SamplingTimes = num;
+                    }
                 }
             }
-            
+            catch (Exception)
+            {
+                TBTimeSpan.Text = CollectTimeSpan.ToString();
+            }
         }
         #endregion
 

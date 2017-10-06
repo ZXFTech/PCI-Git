@@ -249,5 +249,83 @@ namespace PCI
 
             return differ;
         }
+
+        /// <summary>
+        /// 计算时间利用率和有效摆角
+        /// </summary>
+        /// <param name="LinearArray"></param>
+        /// <returns></returns>
+        public List<double> CalculateTimeUtilizationAndSpeedUniformity(List<int> LinearArray,Waveform DerivatedWave,out List<double> SpeedUniformity)
+        {
+            double m = 0;
+            double n = 0;
+            double nc = 0;
+            double l = 0;
+            SpeedUniformity = new List<double>();
+            List<double> TimeUtilization = new List<double>();
+            double Speed= 0;
+            for (int i = 0; i < LinearArray.Count - 1; i++)
+            {
+                //检测到一个上升沿
+                if (LinearArray[i] - LinearArray[i + 1] < 0)
+                {
+                    m++;                                            //上升沿次数+1
+                    if (m == 3)                                     //完成一个周期
+                    {
+                        TimeUtilization.Add(n / l);                 //按周期存储时间时间利用率
+                        m = 1;                                      //重新开始记录上升沿周期
+                        l = 0;                                      //周期点数归零
+                        n = 0;                                      //周期内线性区点数归零
+                    }
+                }
+                if (m!=0)                                           //表明已经进入一个新的周期中
+                {
+                    l++;                                            //记录周期点数
+                    if (LinearArray[i] == 1)                        //若线性数组i元素等于1，则表示进入一个线性区
+                    {
+                        nc++;                                       //记录当前线性区点数
+                        n++;                                        //记录周期内线性区点数
+                        Speed += Math.Abs(DerivatedWave[i]._value); //累加角速度数组当前速度值
+                    }
+                    if (LinearArray[i] - LinearArray[i - 1] > 0)    //表示一个下降沿，证明离开了当前线性区
+                    {
+                        SpeedUniformity.Add(Speed / n);             //计算速度均匀性，并添加到速度均匀性数组中
+                        Speed = 0;                                  //速度清零
+                        nc = 0;                                     //当前线性区点数清零
+                    }
+                }
+            }
+            return TimeUtilization;                                 //按周期存储的时间利用率数组
+        }
+
+        /// <summary>
+        /// 单纯计算速度均匀性
+        /// </summary>
+        /// <param name="LinearArray"></param>
+        /// <param name="DerivatedWave"></param>
+        /// <returns></returns>
+        public double CalculateSpeedUniformity(List<int> LinearArray,Waveform DerivatedWave)
+        {
+            double m = 0;
+            double n = 0;
+            double speed = 0;
+            for (int i = 0; i < LinearArray.Count - 1; i++)
+            {
+                if (LinearArray[i] - LinearArray[i + 1] < 0)
+                {
+                    m++;
+                    if (m == 3)
+                    {
+                        break;
+                    }
+                    if (LinearArray[i] == 1)
+                    {
+                        n++;
+                        speed += DerivatedWave[i]._value;
+                    }
+                }
+            }
+            return speed / n;
+        }
     }
 }

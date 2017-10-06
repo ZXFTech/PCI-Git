@@ -88,7 +88,6 @@
     </ApplicationDefinition>
     <Compile Include="DrawingCanvas.cs" />
     <Compile Include="NumericBox.cs" />
-    <Compile Include="PCIDevice.cs" />
     <Compile Include="Waveform.cs" />
     <Compile Include="WaveProcesser.cs" />
     <Compile Include="_PCI2168_PARA_INIT.cs" />
