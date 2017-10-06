@@ -27,7 +27,7 @@ namespace PCI
             {
                 return InputWave;
             }
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime);
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime,InputWave.Type);
 
             for (int i = 0; i < InputWave.Length - Weight; i++)
             {
@@ -45,7 +45,7 @@ namespace PCI
         /// <returns></returns>
         public Waveform Derivative(Waveform InputWave ,out Waveform Zero)
         {
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime, "Derivate");
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime, "Derivated");
             Zero = new Waveform(InputWave.TimeSpan, InputWave.StartTime);
 
             for (int i = 0; i < InputWave.Length-1; i++)
@@ -74,7 +74,7 @@ namespace PCI
         /// <returns></returns>
         public Waveform MedianFilter(Waveform InputWave, int Weight)
         {
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime);
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime,InputWave.Type);
 
             Waveform CacheWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime);
             for (int i = 0; i < InputWave.Length / Weight - 1; i++)
@@ -95,7 +95,7 @@ namespace PCI
         /// <returns></returns>
         public Waveform DownSampling(Waveform InputWave,int Weight)
         {
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan*100, InputWave.StartTime);
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan*100, InputWave.StartTime,InputWave.Type);
 
             for (int i = 0; i < InputWave.Length / Weight - 1; i++)
             {
@@ -211,7 +211,7 @@ namespace PCI
                 return null;
             }
 
-            Waveform OutputWave = new Waveform(differenceWave.TimeSpan, differenceWave.StartTime);
+            Waveform OutputWave = new Waveform(differenceWave.TimeSpan, differenceWave.StartTime,differenceWave.Type);
 
             double rate = 3.303 / 5.667 * 17 / 63;
 

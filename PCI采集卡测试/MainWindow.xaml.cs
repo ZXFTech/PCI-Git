@@ -101,79 +101,82 @@ namespace PCI
         //绘制波形 新方法
         public void MethodDrawWaves(Waveform Vwave)
         {
-            LinearWave = new Waveform();
-
-            string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
-            //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), new object[] { "线性度为" + TBLinear });
-            double linear = double.Parse(Linear);
-            LinearArray = waveProcesser.CalculateLinearArea(Vwave, linear);
-
-            double TopRange = 0;
-
-            //清空之前的数据
-            Points1.Clear();
-
-            //点容器
-            Point point;
-            //获得画布的尺寸
-            double height = UI.ActualHeight;
-            double width = UI.ActualWidth;
-
-            double WaveRange = (Vwave.Max() - Vwave.Min()) / 2 + Vwave.Min();
-
-            NullableValue RangeValue = new NullableValue(WaveRange);
-            for (int i = 0; i < Vwave.Length; i++)
+            if (Vwave != null && Vwave.Length != 0)
             {
-                Vwave[i] = Vwave[i] - RangeValue;
-            }
+                LinearWave = new Waveform();
 
-            double digit = Math.Floor(Math.Log10(Vwave.Max()));
+                string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
+                //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), new object[] { "线性度为" + TBLinear });
+                double linear = double.Parse(Linear);
+                LinearArray = waveProcesser.CalculateLinearArea(Vwave, linear);
 
-            double digitnum = Vwave.Max() / Math.Pow(10, digit);
+                double TopRange = 0;
 
-            double mid = Math.Floor(digitnum);
+                //清空之前的数据
+                Points1.Clear();
 
-            if (digitnum > (mid + 0.5))
-            {
-                TopRange = (mid + 1) * Math.Pow(10, digit);
-            }
-            else
-            {
-                TopRange = (mid + 1) * Math.Pow(10, digit) - Math.Pow(10, digit) * 0.5;
-            }
+                //点容器
+                Point point;
+                //获得画布的尺寸
+                double height = UI.ActualHeight;
+                double width = UI.ActualWidth;
 
-            double heightPercentage = height / 2 / TopRange;
-            double widthPencentage = Vwave.Length / width;
+                double WaveRange = (Vwave.Max() - Vwave.Min()) / 2 + Vwave.Min();
 
-            List<double> TargetYList = new List<double>();
-            double m = 0;
-            for (int i = 0; i < width; i++)
-            {
-                double TargetY = height / 2 - Vwave[(int)Math.Floor(m)]._value * heightPercentage;
-
-                if (m < DerivatedWave.Length)
+                NullableValue RangeValue = new NullableValue(WaveRange);
+                for (int i = 0; i < Vwave.Length; i++)
                 {
-                    LinearWave.Add(LinearArray[i]);
+                    Vwave[i] = Vwave[i] - RangeValue;
                 }
 
-                m += widthPencentage;
+                double digit = Math.Floor(Math.Log10(Vwave.Max()));
 
-                Points1.Add(new Point(i, TargetY));
+                double digitnum = Vwave.Max() / Math.Pow(10, digit);
+
+                double mid = Math.Floor(digitnum);
+
+                if (digitnum > (mid + 0.5))
+                {
+                    TopRange = (mid + 1) * Math.Pow(10, digit);
+                }
+                else
+                {
+                    TopRange = (mid + 1) * Math.Pow(10, digit) - Math.Pow(10, digit) * 0.5;
+                }
+
+                double heightPercentage = height / 2 / TopRange;
+                double widthPencentage = Vwave.Length / width;
+
+                List<double> TargetYList = new List<double>();
+                double m = 0;
+                for (int i = 0; i < width; i++)
+                {
+                    double TargetY = height / 2 - Vwave[(int)Math.Floor(m)]._value * heightPercentage;
+
+                    if (m < DerivatedWave.Length)
+                    {
+                        LinearWave.Add(LinearArray[(int)Math.Floor(m)]);
+                    }
+
+                    m += widthPencentage;
+
+                    Points1.Add(new Point(i, TargetY));
+                }
+
+                OutputFile(LinearWave, "LinearWave");
+                OutputFile(LinearArray, "LinearArray");
+                OutputFile(Points1, "PointYArray");
+
+
+                //wave1.Points = Points1;
+                //UI.Children.Clear();
+                //UI.Children.Add(wave1);
+                if (UI.visualChildrenCount > 0)
+                    UI.RemoveVisual(UI.getVisualChild(0));
+                UI.AddVisual(DrawPolyline(Points1, new SolidColorBrush(Color.FromRgb(89, 255, 91)), 1));
+
+                //int ActualLong=CBIndexToWidthPoints(CBXAxis.SelectedIndex
             }
-
-            OutputFile(LinearWave, "LinearWave");
-            OutputFile(LinearArray, "LinearArray");
-            OutputFile(Points1, "PointYArray");
-
-
-            //wave1.Points = Points1;
-            //UI.Children.Clear();
-            //UI.Children.Add(wave1);
-            if (UI.visualChildrenCount > 0)
-                UI.RemoveVisual(UI.getVisualChild(0));
-            UI.AddVisual(DrawPolyline(Points1, new SolidColorBrush(Color.FromRgb(89, 255, 91)), 1));
-
-            //int ActualLong=CBIndexToWidthPoints(CBXAxis.SelectedIndex
         }
 
         /// <summary>
@@ -221,16 +224,20 @@ namespace PCI
         {
             isAngle = true;
             if (firsttime)
+            {
                 DrawingWave = TargetWave;
                 MethodDrawWaves(TargetWave);
+            }
         }
 
         private void RBtnAlphaDisplay_Checked(object sender, RoutedEventArgs e)
         {
             isAngle = false;
             if (firsttime)
+            {
                 DrawingWave = DerivatedWave;
                 MethodDrawWaves(DrawingWave);
+            }
         }
 
         #region 废弃的方法
@@ -738,7 +745,6 @@ namespace PCI
         }
 
         #region 表格读取事件
-        Waveform ExcelWave = new Waveform();
         private void ReadButton_Click(object sender, RoutedEventArgs e)
         {
             string ExcelFilePath;
@@ -753,20 +759,30 @@ namespace PCI
                 FileStream fs = new FileStream(ExcelFilePath, FileMode.Open, FileAccess.Read);
                 if (ExcelFilePath.IndexOf(".xls") > 0)
                 {
-                    workBook = new XSSFWorkbook(fs);
+                    workBook = new HSSFWorkbook(fs);
                 }
                 else
                 {
-                    workBook = new HSSFWorkbook(fs);
+                    workBook = new XSSFWorkbook(fs);
                 }
-                DrawingWave = ReadExcelWave(workBook);
+                TargetWave = ReadExcelWave(workBook);
+                TargetWave.Type = "Origin";
+                DerivatedWave = waveProcesser.Derivative(TargetWave,out Waveform Zero);
+                if (isAngle)
+                {
+                    DrawingWave = TargetWave;
+                }
+                else
+                {
+                    DrawingWave = DerivatedWave;
+                }
                 UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
 
                 Array DataPropertyArray = Enum.GetValues(typeof(DataProperty));
-                for (int i = 0; i < DataPropertyArray.Length; i++)
-                {
-                    DataPropertyList[i] = ReadExcelData(workBook, (DataProperty)DataPropertyArray.GetValue(i));
-                }
+                //for (int i = 0; i < DataPropertyArray.Length; i++)
+                //{
+                //    DataPropertyList[i] = ReadExcelData(workBook, (DataProperty)DataPropertyArray.GetValue(i));
+                //}
 
             }
             else
@@ -784,6 +800,7 @@ namespace PCI
         /// <returns></returns>
         public Waveform ReadExcelWave(IWorkbook workBook)
         {
+            Waveform ExcelWave = new Waveform();
             ISheet WaveSheet = workBook.GetSheet("原始波形");
             IRow row;
             for (int i = 1; i < WaveSheet.LastRowNum; i++)
@@ -800,7 +817,18 @@ namespace PCI
                     }
                 }
             }
-            return ExcelWave;
+            double X1, X2;
+            if (double.TryParse(WaveSheet.GetRow(1).GetCell(0).ToString(), out double result1))
+            {
+                X1 = result1;
+                if (double.TryParse(WaveSheet.GetRow(2).GetCell(0).ToString(), out double result2))
+                {
+                    X2 = result2;
+                    ExcelWave.TimeSpan = X2 - X1;
+                    return ExcelWave;
+                }
+            }
+            return null;
         }
         #endregion
 
@@ -1142,8 +1170,8 @@ namespace PCI
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
-                TBSingleTime.Text = SingleTime.ToString();
+                TBSingleTime.Text = m_nScnt.ToString();
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), e.ToString());
             }
         }
         #endregion
@@ -1160,21 +1188,28 @@ namespace PCI
 
         private void TBTimeSpan_TextChanged(object sender, TextChangedEventArgs e)
         {
-            int num = Convert.ToInt32(TBTimeSpan.Text);
-            if (num < SingleTimeLowerLimit)
+            try
             {
-                MessageBox.Show("输入超出范围！\n单次最大时间：" + TimeSpanUpperLimit + "\n单次最小时间：" + TimeSpanLowerLimit);
-                TBTimeSpan.Text = TimeSpanLowerLimit.ToString();
+                int num = Convert.ToInt32(TBTimeSpan.Text);
+                if (num < SingleTimeLowerLimit)
+                {
+                    MessageBox.Show("输入超出范围！\n单次最大时间：" + TimeSpanUpperLimit + "\n单次最小时间：" + TimeSpanLowerLimit);
+                    TBTimeSpan.Text = TimeSpanLowerLimit.ToString();
+                }
+                else if (num > SingleTimeUpperLimit)
+                {
+                    MessageBox.Show("输入超出范围！\n单次最大时间：" + TimeSpanUpperLimit + "\n单次最小时间：" + TimeSpanLowerLimit);
+                    TBTimeSpan.Text = TimeSpanUpperLimit.ToString();
+                }
+                else
+                {
+                    //获取采集间隔
+                    CollectTimeSpan = Convert.ToInt32(TBTimeSpan.Text);
+                }
             }
-            else if (num > SingleTimeUpperLimit)
+            catch (Exception)
             {
-                MessageBox.Show("输入超出范围！\n单次最大时间：" + TimeSpanUpperLimit + "\n单次最小时间：" + TimeSpanLowerLimit);
-                TBTimeSpan.Text = TimeSpanUpperLimit.ToString();
-            }
-            else
-            {
-                //获取采集间隔
-                CollectTimeSpan = Convert.ToInt32(TBTimeSpan.Text);
+
             }
         }
         #endregion
