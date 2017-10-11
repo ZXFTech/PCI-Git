@@ -233,7 +233,6 @@ namespace PCI
                 SpeedUniformityList = SpeedUnifomitylist;
                 TimeUtilization = TimeUtilizationList.Sum() / TimeUtilizationList.Count;
                 SpeedUniformity = SpeedUniformityList.Sum() / SpeedUniformityList.Count;
-                //计算有效摆角
 
                 #region 对导数部分处理
                 #region 计算零点和周期
@@ -262,12 +261,11 @@ namespace PCI
                 #endregion
                 #endregion
 
-                ////更新过零特性TBL，暂时没有StandardWave所以先屏蔽。
                 TBLZero.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLZero, "0" });
                 TBLScanFreq.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLScanFreq, SacnFrequency.ToString("N2") + "Hz" });
-                TBLTimeUtilization.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLTimeUtilization, TimeUtilization.ToString()});
+                TBLTimeUtilization.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLTimeUtilization, TimeUtilization.ToString("N2")});
                 TBLEffectiveAngle.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLEffectiveAngle, SacnFrequency.ToString("N2")});
-                TBLSpeedUniformity.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLSpeedUniformity, SpeedUniformity.ToString()});
+                TBLSpeedUniformity.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLSpeedUniformity, SpeedUniformity.ToString("N2")});
 
                 OutputFile(TargetWave, "TargetWave");
                 OutputFile(DerivatedWave, "DerivatedWave");
@@ -283,7 +281,6 @@ namespace PCI
                 UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
 
                 SaveExcel();
-
 
                 Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "第" + (times + 1) + "次采集完成！\n" + "频率为" + SacnFrequency.ToString() });
                 if (SamplingTimes != 1)
@@ -309,6 +306,12 @@ namespace PCI
         {
             if (Vwave != null && Vwave.Length != 0)
             {
+                LinearWave = new Waveform();
+                string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
+                //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), new object[] { "线性度为" + TBLinear });
+                double linear = double.Parse(Linear);
+                LinearArray = waveProcesser.CalculateLinearArea(DerivatedWave, linear);
+
                 double TopRange = 0;
 
                 //清空之前的数据
@@ -602,7 +605,7 @@ namespace PCI
                 new string[] { "测量时间" },
                 new string[] { NowDay + NowTime }
             };
-            string[] SubTitle = new string[] { "标准-从零点起始", "测量值-按零点起始", "△t", "标准-初始为25HZ", "测量", "偏差", "线性段1时间","时间利用率","线性段2时间","时间利用率","有效摆角1","有效摆角","速度均匀性1","速度均匀性2" };
+            string[] SubTitle = new string[] { "标准-从零点起始", "测量值-按零点起始", "△t", "标准-初始为25HZ", "测量", "偏差", "线性段1时间","时间利用率","线性段2时间","时间利用率","有效摆角1","有效摆角","速度1","速度2" };
 
 
             #region 数据记录表
@@ -841,42 +844,49 @@ namespace PCI
             {
                 ExcelFilePath = filedialog.FileName;
                 IWorkbook workBook = null;
-                FileStream fs = new FileStream(ExcelFilePath, FileMode.Open, FileAccess.Read);
-                if (ExcelFilePath.IndexOf(".xls") > 0)
+                try
                 {
-                    workBook = new HSSFWorkbook(fs);
+                    FileStream fs = new FileStream(ExcelFilePath, FileMode.Open, FileAccess.Read);
+                    if (ExcelFilePath.IndexOf(".xls") > 0)
+                    {
+                        workBook = new HSSFWorkbook(fs);
+                    }
+                    else
+                    {
+                        workBook = new XSSFWorkbook(fs);
+                    }
+                    TargetWave = ReadExcelWave(workBook);
+                    TargetWave.Type = "Origin";
+                    DerivatedWave = waveProcesser.Derivative(TargetWave, out Waveform Zero);
+
+                    LinearWave = new Waveform();
+
+                    string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
+                    double linear = double.Parse(Linear);
+                    LinearArray = waveProcesser.CalculateLinearArea(DerivatedWave, linear);
+
+                    if (isAngle)
+                    {
+                        DrawingWave = TargetWave;
+                    }
+                    else
+                    {
+                        DrawingWave = DerivatedWave;
+                    }
+                    UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
+
+                    Array DataPropertyArray = Enum.GetValues(typeof(DataProperty));
+                    for (int i = 0; i < DataPropertyArray.Length; i++)
+                    {
+                        DataPropertyList[i] = ReadExcelData(workBook, (DataProperty)DataPropertyArray.GetValue(i));
+                        TextBoxList[i].Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TextBoxList[i], DataPropertyList[i].ToString("N4") });
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    workBook = new XSSFWorkbook(fs);
+                    MessageBox.Show(ex.Message);
                 }
-                TargetWave = ReadExcelWave(workBook);
-                TargetWave.Type = "Origin";
-                DerivatedWave = waveProcesser.Derivative(TargetWave,out Waveform Zero);
-
-                LinearWave = new Waveform();
-
-                string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
-                double linear = double.Parse(Linear);
-                LinearArray = waveProcesser.CalculateLinearArea(DerivatedWave, linear);
-
-                if (isAngle)
-                {
-                    DrawingWave = TargetWave;
-                }
-                else
-                {
-                    DrawingWave = DerivatedWave;
-                }
-                UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
-
-                Array DataPropertyArray = Enum.GetValues(typeof(DataProperty));
-                for (int i = 0; i < DataPropertyArray.Length; i++)
-                {
-                    DataPropertyList[i] = ReadExcelData(workBook, (DataProperty)DataPropertyArray.GetValue(i));
-                    TextBoxList[i].Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus),new object[] { TextBoxList[i], DataPropertyList[i].ToString() });
-                }
-
+                
             }
             else
             {

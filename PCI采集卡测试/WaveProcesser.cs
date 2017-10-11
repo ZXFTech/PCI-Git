@@ -66,6 +66,26 @@ namespace PCI
             return OutputWave;
         }
 
+        List<double> CalculateZeroPoint(Waveform StandardZero,Waveform CollectedZero)
+        {
+            List<double> outputZero = new List<double>();
+            List<Point> StandardZeroPoint = new List<Point>();
+            List<Point> CollectedZeroPoint = new List<Point>();
+            int m = 0, n = 0;
+            for (int i = 0; i < StandardZero.Length; i++)
+            {
+                if (m!=0)
+                {
+                    m++;
+                }
+                if (StandardZero[i]._value==1)
+                {
+                    StandardZeroPoint.Add(i,);
+                }
+            }
+            return outputZero;
+        }
+
         /// <summary>
         /// 中值滤波
         /// </summary>
@@ -287,7 +307,7 @@ namespace PCI
                         n++;                                        //记录周期内线性区点数
                         Speed += Math.Abs(DerivatedWave[i]._value); //累加角速度数组当前速度值
                     }
-                    if (LinearArray[i] - LinearArray[i - 1] > 0)    //表示一个下降沿，证明离开了当前线性区
+                    if (LinearArray[i] - LinearArray[i + 1] > 0)    //表示一个下降沿，证明离开了当前线性区
                     {
                         SpeedUniformity.Add(Speed / n);             //计算速度均匀性，并添加到速度均匀性数组中
                         Speed = 0;                                  //速度清零
