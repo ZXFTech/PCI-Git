@@ -16,14 +16,14 @@ namespace PCI
 
         }
 
-        public Waveform(double timespan,double startTime = 0,string type="")
+        public Waveform(double timespan,double startTime = 0,string type="Origin")
         {
             this.timeSpan = timespan;
             this.startTime = startTime;
             this.type = type;
         }
 
-        public Waveform(List<double> waveArray, double timeSpan = 1, double startTime = 0,string type="")
+        public Waveform(List<double> waveArray, double timeSpan = 1, double startTime = 0,string type="Origin")
         {
             this.WaveArray = waveArray;
             this.timeSpan = timeSpan;

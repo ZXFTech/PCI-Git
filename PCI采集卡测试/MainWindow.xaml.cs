@@ -20,7 +20,6 @@ using NPOI.HSSF.UserModel;
 using NPOI.SS.Util;
 using NPOI.SS.UserModel;
 using static PCI.Waveform;
-using MahApps.Metro.Controls;
 using Microsoft.Win32;
 using System.Text.RegularExpressions;
 using NPOI.XSSF.UserModel;
@@ -97,7 +96,7 @@ namespace PCI
         //滤波权重
         public int MeanFilteWeight = 20;
         public int MedianFilteWeight = 20;
-        public int DownsampleWeight = 100;
+        public int DownsampleWeight = 1;
         //波形采集线程
         Thread ThreadCollectWave;
 
@@ -218,9 +217,19 @@ namespace PCI
                 OutputFile(CH2, "CH2Protype");
 
                 TargetWave = ProcessWave(CH1, CH2);
+                //Waveform TargetStandardZeroWave = ProcessWave(CH3);
+                OutputFile(TargetWave, "TargetName");
+
 
                 //求导
+                Zero = new Waveform(TargetWave.TimeSpan, TargetWave.StartTime);
                 DerivatedWave = waveProcesser.Derivative(TargetWave, out Zero);
+
+                OutputFile(DerivatedWave, "DerivatedWave");
+
+                ////Waveform DerivatedStandardZero = new Waveform(TargetStandardZeroWave.TimeSpan,TargetStandardZeroWave.StartTime);
+                ////Waveform StandardZero = new Waveform(TargetStandardZeroWave.TimeSpan,TargetStandardZeroWave.StartTime);
+                //DerivatedStandardZero = waveProcesser.Derivative(TargetStandardZeroWave, out StandardZero);
 
                 LinearWave = new Waveform();
                 string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
@@ -518,14 +527,22 @@ namespace PCI
             //整体降采样
             Waveform CH11 = waveProcesser.DownSampling(OriginWaveCH1, DownsampleWeight);
             Waveform CH21 = waveProcesser.DownSampling(OriginWaveCH2, DownsampleWeight);
+
+            OutputFile(CH11, "CH1");
+            OutputFile(CH21, "CH2");
             #region 对原始波形处理部分
 
             //计算角度变化波形
             TargetWave = waveProcesser.Calculate(CH21, CH11);
+
+            
             //中值滤波
             TargetWave = waveProcesser.MedianFilter(TargetWave, MedianFilteWeight);
+
+
             //均值滤波
             TargetWave = waveProcesser.MeanFilter(TargetWave, MeanFilteWeight);
+
 
             return TargetWave;
             #endregion
@@ -538,7 +555,7 @@ namespace PCI
         /// <returns></returns>
         public Waveform ProcessWave(Waveform OriginWaveCH1)
         {
-            Waveform TargetWave = new Waveform();
+            Waveform TargetWave = new Waveform(OriginWaveCH1.TimeSpan,OriginWaveCH1.StartTime,OriginWaveCH1.Type);
             #region 对原始波形处理部分
             //整体降采样
             TargetWave = waveProcesser.DownSampling(OriginWaveCH1, DownsampleWeight);
@@ -1035,6 +1052,8 @@ namespace PCI
 
         //零点波形——存放零点信息
         Waveform Zero;
+        //零点标志位波形计算出的零点波形
+        Waveform ZeroWave;
 
         //线性度数组——用于线性度计算
         List<int> LinearArray = new List<int>();
@@ -1287,6 +1306,7 @@ namespace PCI
                 {
                     //获取采集时长
                     m_nScnt = num;
+                    TBSingleTime.Text = m_nScnt.ToString();
                 }
             }
             catch (Exception ex)
@@ -1332,7 +1352,7 @@ namespace PCI
             catch (Exception)
             {
                 TBTimeSpan.Text = CollectTimeSpan.ToString();
-                Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), e.ToString());
+                //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), e.ToString());
             }
         }
         #endregion

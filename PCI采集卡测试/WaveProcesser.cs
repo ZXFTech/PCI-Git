@@ -47,7 +47,6 @@ namespace PCI
         {
             Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime, "Derivated");
             Zero = new Waveform(InputWave.TimeSpan, InputWave.StartTime);
-
             for (int i = 0; i < InputWave.Length-1; i++)
             {
                 OutputWave.Add((InputWave[i + 1] - InputWave[i])/new NullableValue(InputWave.TimeSpan));
@@ -66,22 +65,56 @@ namespace PCI
             return OutputWave;
         }
 
+        /// <summary>
+        /// 计算标志位零点数组和采集零点数组的差值
+        /// </summary>
+        /// <param name="StandardZero"></param>
+        /// <param name="CollectedZero"></param>
+        /// <returns></returns>
         List<double> CalculateZeroPoint(Waveform StandardZero,Waveform CollectedZero)
         {
             List<double> outputZero = new List<double>();
-            List<Point> StandardZeroPoint = new List<Point>();
-            List<Point> CollectedZeroPoint = new List<Point>();
+            List<double> StandardZeroPoint = new List<double>();
+            List<double> CollectedZeroPoint = new List<double>();
             int m = 0, n = 0;
             for (int i = 0; i < StandardZero.Length; i++)
             {
-                if (m!=0)
+                if (m != 0)
                 {
+                    if (StandardZero[i]._value == 1)
+                    {
+                        StandardZeroPoint.Add(m * StandardZero.TimeSpan);
+                    }
                     m++;
                 }
-                if (StandardZero[i]._value==1)
+                else if (StandardZero[i]._value==1)
                 {
-                    StandardZeroPoint.Add(i,);
+                    StandardZeroPoint.Add(m*StandardZero.TimeSpan);
+                    m++;
                 }
+            }
+            for (int i = 0; i < CollectedZero.Length; i++)
+            {
+                if (n != 0)
+                {
+                    if (CollectedZero[i]._value == 1)
+                    {
+                        CollectedZeroPoint.Add(n * CollectedZero.TimeSpan);
+                    }
+                    n++;
+                }
+                else if (StandardZero[i]._value == 1)
+                {
+                    StandardZeroPoint.Add(n * StandardZero.TimeSpan);
+                    n++;
+                }
+            }
+
+            int length = StandardZeroPoint.Count < CollectedZeroPoint.Count ? StandardZeroPoint.Count : CollectedZeroPoint.Count;
+
+            for (int i = 0; i < length; i++)
+            {
+                outputZero.Add(CollectedZeroPoint[i] - StandardZeroPoint[i]);
             }
             return outputZero;
         }
@@ -233,7 +266,9 @@ namespace PCI
 
             Waveform OutputWave = new Waveform(differenceWave.TimeSpan, differenceWave.StartTime,differenceWave.Type);
 
-            double rate = 3.303 / 5.667 * 17 / 63;
+            //double rate = 3.303 / 5.667 * 17 / 63;
+
+            double rate = 1d / 3d * 17 / 63;
 
             for (int i = 0; i < differenceWave.Length; i++)
             {
