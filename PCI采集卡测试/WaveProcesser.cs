@@ -66,6 +66,43 @@ namespace PCI
         }
 
         /// <summary>
+        /// 仅计算导数
+        /// </summary>
+        /// <param name="InputWave"></param>
+        /// <returns></returns>
+        public Waveform OnlyDerivated(Waveform InputWave)
+        {
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime, "Derivated");
+            for (int i = 0; i < InputWave.Length-1; i++)
+            {
+                OutputWave.Add((InputWave[i + 1] - InputWave[i] )/ new NullableValue(InputWave.TimeSpan));
+            }
+            return OutputWave;
+        }
+
+        /// <summary>
+        /// 仅计算零点
+        /// </summary>
+        /// <param name="InputWave"></param>
+        /// <returns></returns>
+        public Waveform CalculateZero(Waveform InputWave)
+        {
+            Waveform Zero = new Waveform(InputWave.TimeSpan, InputWave.StartTime);
+            for (int i = 0; i < InputWave.Length-1; i++)
+            {
+                if (InputWave[i]*InputWave[i+1]<=0)
+                {
+                    Zero.Add(1);
+                }
+                else
+                {
+                    Zero.Add(0);
+                }
+            }
+            return Zero;
+        }
+
+        /// <summary>
         /// 计算标志位零点数组和采集零点数组的差值
         /// </summary>
         /// <param name="StandardZero"></param>
@@ -148,7 +185,7 @@ namespace PCI
         /// <returns></returns>
         public Waveform DownSampling(Waveform InputWave,int Weight)
         {
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan*100, InputWave.StartTime,InputWave.Type);
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan*Weight, InputWave.StartTime,InputWave.Type);
 
             for (int i = 0; i < InputWave.Length / Weight - 1; i++)
             {
@@ -381,6 +418,108 @@ namespace PCI
                 }
             }
             return speed / n;
+        }
+
+        /// <summary>
+        /// 将AD16位数字转换成真实电压值
+        /// </summary>
+        /// <param name="inputWave"></param>
+        /// <param name="ch"></param>
+        /// <returns></returns>
+        public Waveform TranslateWaveform(Waveform inputWave,string ch)
+        {
+            Waveform outputWave = new Waveform(inputWave.TimeSpan, inputWave.StartTime, inputWave.Type);
+
+            switch (ch)
+            {
+                case "CH1":
+                    for (int i = 0; i < inputWave.Length; i++)
+                    {
+                        outputWave.Add(new NullableValue(inputWave[i]._value - 32768));
+                    }
+                    return outputWave;
+                case "CH2":
+                    for (int i = 0; i < inputWave.Length; i++)
+                    {
+                        outputWave.Add(new NullableValue((inputWave[i]._value - 32768) * 3));
+                    }
+                    return outputWave;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// 计算所有属性，以列表的形式呈现
+        /// </summary>
+        /// <param name="ZeroWave"></param>
+        /// <param name="LinearArray"></param>
+        /// <param name="TargetWave"></param>
+        /// <param name="DerivatedWave"></param>
+        /// <returns></returns>
+        public List<List<double>> CalculateProperties(Waveform ZeroWave, List<int> LinearArray,Waveform TargetWave,Waveform DerivatedWave)
+        {
+            List<List<double>> ListProperty= new List<List<double>>();
+            List<double> ListFrequency = new List<double>();
+            List<double> ListAngle = new List<double>();
+            List<double> ListSpeed = new List<double>();
+            List<double> ListTimeU= new List<double>();
+            List<double> ListTime= new List<double>();
+
+            ListProperty.Add(ListFrequency);
+            ListProperty.Add(ListAngle);
+            ListProperty.Add(ListSpeed);
+            ListProperty.Add(ListTimeU);
+            ListProperty.Add(ListTime);
+
+            int STP = 0;
+
+            //double Frequency = 0;
+            double Speed = 0;
+            double Angle= 0;
+            double Time = 0;
+
+            bool isAPeriod = false;
+            bool isFirst = true;
+
+            for (int i = 0; i < ZeroWave.Length; i++)
+            {
+                if (i<LinearArray.Count)
+                {
+                    if (ZeroWave[i]._value == 1)
+                    {
+                        if (!isFirst)
+                        {
+                            int Range = i - STP;
+                            if (isAPeriod)
+                            {
+                                ListFrequency.Add(0.5 / (Range * ZeroWave.TimeSpan));
+                            }
+                            ListAngle.Add(Angle / Time);
+                            ListSpeed.Add(Speed / Time);
+                            ListTime.Add(Time * ZeroWave.TimeSpan);
+                            ListTimeU.Add(Time / Range);
+
+                            Speed = 0;
+                            Angle = 0;
+                            Time = 0;
+                            isAPeriod = !isAPeriod;
+                        }
+                        else
+                        {
+                            isFirst = false;
+                        }
+                        STP = i;
+                    }
+                    if (LinearArray[i]==1)
+                    {
+                        Time++;
+                        Angle += Math.Abs(TargetWave[i]._value);
+                        Speed += Math.Abs(DerivatedWave[i]._value);
+                    }
+                }
+            }
+            return ListProperty;
         }
     }
 }

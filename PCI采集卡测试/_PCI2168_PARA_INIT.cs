@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace PCI
 {
-    struct _PCI2168_PARA_INIT
+    public struct _PCI2168_PARA_INIT
     {
         public long lChCnt;        //通道数1-1通道 2-2通道 4-4通道 8-8通道
         public long TriggerMode;   //触发模式
