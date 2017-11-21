@@ -11,6 +11,8 @@ namespace PCI
 {
     class WaveProcesser
     {
+        TestClass testClass = new TestClass();
+
         /// <summary>
         /// 均值滤波
         /// </summary>
@@ -19,15 +21,15 @@ namespace PCI
         /// <returns></returns>
         public Waveform MeanFilter(Waveform InputWave, int Weight)
         {
-            if (InputWave.Length== 0 )
+            if (InputWave.Length == 0)
             {
                 return null;
             }
-            if (Weight==1)
+            if (Weight == 1)
             {
                 return InputWave;
             }
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime,InputWave.Type);
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime, InputWave.Type);
 
             for (int i = 0; i < InputWave.Length - Weight; i++)
             {
@@ -35,7 +37,7 @@ namespace PCI
             }
 
             return OutputWave;
-        } 
+        }
 
         /// <summary>
         /// 求导(每两点间的变化率)
@@ -43,13 +45,13 @@ namespace PCI
         /// <param name="InputWave"> 需要进行求导的数组 </param>
         /// <param name="Zero"> 计算得到的零点数组 </param>
         /// <returns></returns>
-        public Waveform Derivative(Waveform InputWave ,out Waveform Zero)
+        public Waveform Derivative(Waveform InputWave, out Waveform Zero)
         {
             Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime, "Derivated");
             Zero = new Waveform(InputWave.TimeSpan, InputWave.StartTime);
-            for (int i = 0; i < InputWave.Length-1; i++)
+            for (int i = 0; i < InputWave.Length - 1; i++)
             {
-                OutputWave.Add((InputWave[i + 1] - InputWave[i])/new NullableValue(InputWave.TimeSpan));
+                OutputWave.Add((InputWave[i + 1] - InputWave[i]) / new NullableValue(InputWave.TimeSpan));
                 if (i > 0)
                 {
                     if (OutputWave[i] * OutputWave[i - 1] <= 0)
@@ -73,9 +75,9 @@ namespace PCI
         public Waveform OnlyDerivated(Waveform InputWave)
         {
             Waveform OutputWave = new Waveform(InputWave.TimeSpan, InputWave.StartTime, "Derivated");
-            for (int i = 0; i < InputWave.Length-1; i++)
+            for (int i = 0; i < InputWave.Length - 1; i++)
             {
-                OutputWave.Add((InputWave[i + 1] - InputWave[i] )/ new NullableValue(InputWave.TimeSpan));
+                OutputWave.Add((InputWave[i + 1] - InputWave[i]) / new NullableValue(InputWave.TimeSpan));
             }
             return OutputWave;
         }
@@ -88,9 +90,9 @@ namespace PCI
         public Waveform CalculateZero(Waveform InputWave)
         {
             Waveform Zero = new Waveform(InputWave.TimeSpan, InputWave.StartTime);
-            for (int i = 0; i < InputWave.Length-1; i++)
+            for (int i = 0; i < InputWave.Length - 1; i++)
             {
-                if (InputWave[i]*InputWave[i+1]<=0)
+                if (InputWave[i] * InputWave[i + 1] <= 0)
                 {
                     Zero.Add(1);
                 }
@@ -108,7 +110,7 @@ namespace PCI
         /// <param name="StandardZero"></param>
         /// <param name="CollectedZero"></param>
         /// <returns></returns>
-        List<double> CalculateZeroPoint(Waveform StandardZero,Waveform CollectedZero)
+        List<double> CalculateZeroPoint(Waveform StandardZero, Waveform CollectedZero)
         {
             List<double> outputZero = new List<double>();
             List<double> StandardZeroPoint = new List<double>();
@@ -124,9 +126,9 @@ namespace PCI
                     }
                     m++;
                 }
-                else if (StandardZero[i]._value==1)
+                else if (StandardZero[i]._value == 1)
                 {
-                    StandardZeroPoint.Add(m*StandardZero.TimeSpan);
+                    StandardZeroPoint.Add(m * StandardZero.TimeSpan);
                     m++;
                 }
             }
@@ -164,7 +166,7 @@ namespace PCI
         /// <returns></returns>
         public Waveform MedianFilter(Waveform InputWave, int Weight)
         {
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime,InputWave.Type);
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime, InputWave.Type);
 
             Waveform CacheWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime);
             for (int i = 0; i < InputWave.Length / Weight - 1; i++)
@@ -183,13 +185,13 @@ namespace PCI
         /// <param name="InputWave"> 需要降采样的波形 </param>
         /// <param name="Weight"> 权重 </param>
         /// <returns></returns>
-        public Waveform DownSampling(Waveform InputWave,int Weight)
+        public Waveform DownSampling(Waveform InputWave, int Weight)
         {
-            Waveform OutputWave = new Waveform(InputWave.TimeSpan*Weight, InputWave.StartTime,InputWave.Type);
+            Waveform OutputWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime, InputWave.Type);
 
             for (int i = 0; i < InputWave.Length / Weight - 1; i++)
             {
-                OutputWave.Add( InputWave[i * Weight]);
+                OutputWave.Add(InputWave[i * Weight]);
             }
 
             return OutputWave;
@@ -201,7 +203,7 @@ namespace PCI
         /// <param name="StandardZero"></param>
         /// <param name="MeasuredZero"></param>
         /// <returns></returns>
-        public List<double> CalculateZeroPhaseDefference(Waveform StandardZero,Waveform MeasuredZero)
+        public List<double> CalculateZeroPhaseDefference(Waveform StandardZero, Waveform MeasuredZero)
         {
             List<double> ZeroPhaseDifference = new List<double>();
             List<double> StandardZeroPoint = new List<double>();
@@ -232,13 +234,13 @@ namespace PCI
         /// <param name="Wave"></param>
         /// <param name="Linear"></param>
         /// <returns></returns>
-        public List<int> CalculateLinearArea(Waveform Wave,double Linear)
+        public List<int> CalculateLinearArea(Waveform Wave, double Linear)
         {
-            if (Wave.Type=="Origin")
+            if (Wave.Type == "Origin")
             {
-                Wave = Derivative(Wave,out Waveform Zero);
+                Wave = Derivative(Wave, out Waveform Zero);
             }
-            if (Wave.Type=="Derivated")
+            if (Wave.Type == "Derivated")
             {
                 List<int> LinearList = new List<int>();
 
@@ -274,7 +276,7 @@ namespace PCI
 
             for (int i = 0; i < list.Count; i++)
             {
-                if ((list[i] > (max-Threshold))||(list[i] < (min+Threshold)))
+                if ((list[i] > (max - Threshold)) || (list[i] < (min + Threshold)))
                 {
                     LinearList.Add(1);
                 }
@@ -301,17 +303,17 @@ namespace PCI
                 return null;
             }
 
-            Waveform OutputWave = new Waveform(differenceWave.TimeSpan, differenceWave.StartTime,differenceWave.Type);
+            Waveform OutputWave = new Waveform(differenceWave.TimeSpan, differenceWave.StartTime, differenceWave.Type);
 
             //double rate = 3.303 / 5.667 * 17 / 63;
 
-            double rate = 1d / 3d * 17 / 63;
+            //double rate = 1d / 3d * 17 / 63;
 
             for (int i = 0; i < differenceWave.Length; i++)
             {
-                OutputWave.Add(Math.Atan((differenceWave[i] / sumWave[i])._value * rate));
+                OutputWave.Add(Math.Atan((differenceWave[i] / sumWave[i])._value));
             }
-
+            
             //OutputWave = differenceWave / sumWave;
 
             return OutputWave;
@@ -347,7 +349,7 @@ namespace PCI
         /// </summary>
         /// <param name="LinearArray"></param>
         /// <returns></returns>
-        public List<double> CalculateTimeUtilizationAndSpeedUniformity(List<int> LinearArray,Waveform DerivatedWave,out List<double> SpeedUniformity)
+        public List<double> CalculateTimeUtilizationAndSpeedUniformity(List<int> LinearArray, Waveform DerivatedWave, out List<double> SpeedUniformity)
         {
             double m = 0;
             double n = 0;
@@ -355,7 +357,7 @@ namespace PCI
             double l = 0;
             SpeedUniformity = new List<double>();
             List<double> TimeUtilization = new List<double>();
-            double Speed= 0;
+            double Speed = 0;
             for (int i = 0; i < LinearArray.Count - 1; i++)
             {
                 //检测到一个上升沿
@@ -370,7 +372,7 @@ namespace PCI
                         n = 0;                                      //周期内线性区点数归零
                     }
                 }
-                if (m!=0)                                           //表明已经进入一个新的周期中
+                if (m != 0)                                           //表明已经进入一个新的周期中
                 {
                     l++;                                            //记录周期点数
                     if (LinearArray[i] == 1)                        //若线性数组i元素等于1，则表示进入一个线性区
@@ -396,7 +398,7 @@ namespace PCI
         /// <param name="LinearArray"></param>
         /// <param name="DerivatedWave"></param>
         /// <returns></returns>
-        public double CalculateSpeedUniformity(List<int> LinearArray,Waveform DerivatedWave)
+        public double CalculateSpeedUniformity(List<int> LinearArray, Waveform DerivatedWave)
         {
             double m = 0;
             double n = 0;
@@ -426,7 +428,7 @@ namespace PCI
         /// <param name="inputWave"></param>
         /// <param name="ch"></param>
         /// <returns></returns>
-        public Waveform TranslateWaveform(Waveform inputWave,string ch)
+        public Waveform TranslateWaveform(Waveform inputWave, string ch)
         {
             Waveform outputWave = new Waveform(inputWave.TimeSpan, inputWave.StartTime, inputWave.Type);
 
@@ -457,14 +459,14 @@ namespace PCI
         /// <param name="TargetWave"></param>
         /// <param name="DerivatedWave"></param>
         /// <returns></returns>
-        public List<List<double>> CalculateProperties(Waveform ZeroWave, List<int> LinearArray,Waveform TargetWave,Waveform DerivatedWave)
+        public List<List<double>> CalculateProperties(Waveform ZeroWave, List<int> LinearArray, Waveform TargetWave, Waveform DerivatedWave)
         {
-            List<List<double>> ListProperty= new List<List<double>>();
+            List<List<double>> ListProperty = new List<List<double>>();
             List<double> ListFrequency = new List<double>();
             List<double> ListAngle = new List<double>();
             List<double> ListSpeed = new List<double>();
-            List<double> ListTimeU= new List<double>();
-            List<double> ListTime= new List<double>();
+            List<double> ListTimeU = new List<double>();
+            List<double> ListTime = new List<double>();
 
             ListProperty.Add(ListFrequency);
             ListProperty.Add(ListAngle);
@@ -472,11 +474,12 @@ namespace PCI
             ListProperty.Add(ListTimeU);
             ListProperty.Add(ListTime);
 
+            //新周期的起始点
             int STP = 0;
 
             //double Frequency = 0;
             double Speed = 0;
-            double Angle= 0;
+            double Angle = 0;
             double Time = 0;
 
             bool isAPeriod = false;
@@ -484,7 +487,7 @@ namespace PCI
 
             for (int i = 0; i < ZeroWave.Length; i++)
             {
-                if (i<LinearArray.Count)
+                if (i < LinearArray.Count)
                 {
                     if (ZeroWave[i]._value == 1)
                     {
@@ -493,12 +496,12 @@ namespace PCI
                             int Range = i - STP;
                             if (isAPeriod)
                             {
-                                ListFrequency.Add(0.5 / (Range * ZeroWave.TimeSpan));
+                                ListFrequency.Add(Math.Round(0.5 / (Range * ZeroWave.TimeSpan), 2));
                             }
-                            ListAngle.Add(Angle / Time);
-                            ListSpeed.Add(Speed / Time);
-                            ListTime.Add(Time * ZeroWave.TimeSpan);
-                            ListTimeU.Add(Time / Range);
+                            ListAngle.Add(Math.Round(Angle / Time, 2));
+                            ListSpeed.Add(Math.Round(Speed / Time, 2));
+                            ListTime.Add(Math.Round(Time * ZeroWave.TimeSpan, 2));
+                            ListTimeU.Add(Math.Round(Time / Range, 2));
 
                             Speed = 0;
                             Angle = 0;
@@ -511,7 +514,7 @@ namespace PCI
                         }
                         STP = i;
                     }
-                    if (LinearArray[i]==1)
+                    if (LinearArray[i] == 1)
                     {
                         Time++;
                         Angle += Math.Abs(TargetWave[i]._value);
@@ -521,5 +524,73 @@ namespace PCI
             }
             return ListProperty;
         }
+
+        #region 波形处理部分
+        /// <summary>
+        /// 通过输入CH1和CH2的波形，处理出原始波形并计算出目标波形
+        /// 
+        /// 过程：
+        /// 1. 对CH1和CH2进行降采样
+        /// 2. 将CH1和CH2转换为真实的电压值
+        /// 3. 通过计算得到角度变化波形TargetWave
+        /// 4. 对角度变化波形进行中值滤波处理
+        /// 5. 对角度变化波形进行均值滤波处理
+        /// 
+        /// </summary>
+        /// <param name="OriginWaveCH1"></param>
+        /// <param name="OriginWaveCH2"></param>
+        /// <returns></returns>
+        public Waveform ProcessWave(Waveform OriginWaveCH1, Waveform OriginWaveCH2, int DownSampleWeight, int MedianFilteWeight, int MeanFilteWeight)
+        {
+            Waveform TargetWave = new Waveform();
+            //整体降采样
+            Waveform CH11 = DownSampling(OriginWaveCH1, DownSampleWeight);
+            Waveform CH21 = DownSampling(OriginWaveCH2, DownSampleWeight);
+
+            CH11 = TranslateWaveform(CH11, "CH1");
+            CH21 = TranslateWaveform(CH21, "CH2");
+
+            testClass.OutputFile(CH11, "CH1");
+            testClass.OutputFile(CH21, "CH2");
+            #region 对原始波形处理部分
+
+            //计算角度变化波形
+            TargetWave = Calculate(CH11, CH21);
+
+
+            //中值滤波
+            TargetWave = MedianFilter(TargetWave, MedianFilteWeight);
+
+
+            //均值滤波
+            TargetWave = MeanFilter(TargetWave, MeanFilteWeight);
+
+
+            return TargetWave;
+            #endregion
+        }
+
+        /// <summary>
+        /// 通过输入原始波形，计算出目标波形
+        /// </summary>
+        /// <param name="OriginWaveCH1"></param>
+        /// <returns></returns>
+        public Waveform ProcessWave(Waveform OriginWaveCH1, int DownSampleWeight, int MedianFilteWeight, int MeanFilteWeight)
+        {
+            Waveform TargetWave = new Waveform(OriginWaveCH1.TimeSpan, OriginWaveCH1.StartTime, OriginWaveCH1.Type);
+            #region 对原始波形处理部分
+            //整体降采样
+            TargetWave = DownSampling(OriginWaveCH1, DownSampleWeight);
+            //中值滤波
+            TargetWave = MedianFilter(TargetWave, MedianFilteWeight);
+            //均值滤波
+            TargetWave = MeanFilter(TargetWave, MeanFilteWeight);
+
+            return TargetWave;
+            #endregion
+        }
+        #endregion
+
     }
+
 }

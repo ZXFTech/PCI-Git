@@ -362,6 +362,7 @@ namespace PCI
         public double ReadExcelData(IWorkbook workBook, DataProperty dataProperty)
         {
             int DataColumn;
+            int AnotherDataColumn;
             bool isSpeedUniformity = false;
             switch (dataProperty)
             {

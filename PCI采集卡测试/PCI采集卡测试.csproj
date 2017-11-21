@@ -90,6 +90,7 @@
     <Compile Include="ExcelReadNWrite.cs" />
     <Compile Include="NumericBox.cs" />
     <Compile Include="Oscillocope.cs" />
+    <Compile Include="TestClass.cs" />
     <Compile Include="Waveform.cs" />
     <Compile Include="WaveProcesser.cs" />
     <Compile Include="_PCI2168_PARA_INIT.cs" />

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using static PCI.MainWindow;
@@ -10,10 +11,7 @@ namespace PCI
 {
     public class Oscillocope
     {
-        //public Oscillocope(Label Status)
-        //{
-        //    this.Status = Status;
-        //}
+        TestClass testClass = new TestClass();
 
         public Label Status;
 
@@ -166,10 +164,102 @@ namespace PCI
             }
         }
 
+        public Waveform[] ReadWave(ulong m_nScnt)
+        {
+            //初始化四个数组
+            Waveform CH1 = new Waveform(1d / 10000000d, 0, "Origin");
+            Waveform CH2 = new Waveform(1d / 10000000d, 0, "Origin");
+            Waveform CH3 = new Waveform(1d / 10000000d, 0, "Origin");
+            Waveform CH4 = new Waveform(1d / 10000000d, 0, "Origin");
+            Waveform TargetWave = new Waveform(1d / 10000000d, 0, "Origin");
+            Waveform[] WaveList = new Waveform[4];
+            //将四个波形数组代入波形数组List
+            WaveList[0] = CH1;
+            WaveList[1] = CH2;
+            WaveList[2] = CH3;
+            WaveList[3] = CH4;
+
+            //计算实际采集长度
+            ulong sicnt = m_nScnt * 10000;                                                                            //每个通道采集的点数
+
+            sicnt *= (ulong)para_init.lChCnt;                                                                           //每个通道采集的样点
+
+            //由于读取函数有最大读取要求，分多次读取数据
+            int read_cnt = 0;
+            ulong read_len = 0;
+            bool isdivisible = false;
+            if ((sicnt % Constants.READ_MAX_LENGTH) == 0)//如果读取的长度，刚好是最大允许读取长度的整数倍
+            {
+                read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH);
+                isdivisible = true;
+            }
+            else
+            {
+                read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH) + 1;
+            }
+
+            for (int i = 0; i < read_cnt; i++)
+            {
+                if (i == (read_cnt - 1))
+                {
+                    if (isdivisible)
+                    {
+                        read_len = Constants.READ_MAX_LENGTH;
+                    }
+                    else
+                    {
+                        read_len = sicnt % Constants.READ_MAX_LENGTH;
+                    }
+                }
+                else
+                {
+                    read_len = Constants.READ_MAX_LENGTH;
+                }
+
+                ushort[] inBuffer = new ushort[read_len];   //分配内存
+
+                //等待缓存钟数据量达到要求
+                bufcnt = DllImport.PCI2168_GetBufCnt(hdl);
+                //Thread.Sleep(50);
+                while (bufcnt < (int)read_len)
+                {
+                    bufcnt = DllImport.PCI2168_GetBufCnt(hdl);
+                    Thread.Sleep(20);
+                }
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "缓存钟数据长度：" + bufcnt + "\n 期望读取长度：" + read_len + "\n总长度：" + sicnt + "\n采集次数：" + read_cnt });
+
+                ulong bBufOver = 0;
+                if (DllImport.PCI2168_ReadAD(hdl, inBuffer, read_len, ref bBufOver))
+                {
+                    int SingleChLength = (int)((long)read_len / para_init.lChCnt) - 1;
+
+                    for (int n = 0; n < SingleChLength; n++)
+                    {
+                        //V1[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n]-32768;
+                        //V2[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n + 1]-32768;
+                        //V1[n + (int)Constants.READ_MAX_LENGTH / para_init.lChCnt * i] = inBuffer[para_init.lChCnt * n];
+                        for (int m = 0; m < para_init.lChCnt; m++)
+                        {
+                            WaveList[m].Add(inBuffer[para_init.lChCnt * n + m]);
+                        }
+                    }
+                    //CH5 = inBuffer;
+                }
+                else
+                {
+                    return null;
+                }
+            }
+
+            return WaveList;
+        }
+
         //status更新方法
         void StutusUpdate(string status)
         {
             Status.Content = status;
         }
+
+
     }
 }

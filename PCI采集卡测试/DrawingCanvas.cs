@@ -11,6 +11,8 @@ namespace PCI
 {
     public class DrawingCanvas:Canvas
     {
+        TestClass testClass = new TestClass();
+
         private List<Visual> visuals = new List<Visual>();
 
         //获取Visual的个数

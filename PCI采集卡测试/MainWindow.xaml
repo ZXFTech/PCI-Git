@@ -119,6 +119,29 @@
                             <Label Grid.Column="2" Content="%"></Label>
                         </Grid>
                     </GroupBox>
+                    <GroupBox Header="静止角检测" BorderThickness="2" BorderBrush="Black"  Margin="10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="1*"></RowDefinition>
+                                <RowDefinition Height="1*"></RowDefinition>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="102"></ColumnDefinition>
+                                    <ColumnDefinition></ColumnDefinition>
+                                    <ColumnDefinition Width="26"></ColumnDefinition>
+                                </Grid.ColumnDefinitions>
+                                <Label Grid.Column="0">当前静止角</Label>
+                                <TextBox Grid.Column="1" Name="TBStaticAngle"></TextBox>
+                                <Label Grid.Column="2">°</Label>
+                            </Grid>
+                            <Grid Grid.Row="1">
+                                <StackPanel HorizontalAlignment="Right">
+                                    <Button Name="ButtonStaticAngleMeasure" Click="ButtonStaticAngleMeasure_Click" Width="90" Margin="10,10,20,10">测量</Button>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </GroupBox>
                 </StackPanel>
             </Grid>
             <pc:DrawingCanvas x:Name="UI" Grid.Column="1" Margin="10" Panel.ZIndex="1" ></pc:DrawingCanvas>

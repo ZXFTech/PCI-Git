@@ -113,6 +113,15 @@ namespace PCI
             }
         }
 
+        /// <summary>
+        /// 计算波形的平均值
+        /// </summary>
+        /// <returns></returns>
+        public double Average()
+        {
+            return this.WaveArray.Average();
+        }
+
         ///// <summary>
         ///// 求和
         ///// </summary>

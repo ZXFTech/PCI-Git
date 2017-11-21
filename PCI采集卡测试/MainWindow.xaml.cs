@@ -45,6 +45,8 @@ namespace PCI
 
             ThreadCollectWave = new Thread(WaveCollect);
 
+            ThreadStaticAngleMeasure = new Thread(StaticAngleMeasure);
+
             firsttime = true;
 
             DataPropertyList.Add(ZeroProperty);
@@ -76,15 +78,15 @@ namespace PCI
         //status更新
         public delegate void UpdateEventHandler(string status);
         //status更新方法
-        public void StutusUpdate(string status)
+        public void StatusUpdate(string status)
         {
             Status.Content = status;
         }
 
         //更新指定控件
-        public delegate void UpdateTBLEventHandler(TextBox TBL, string status);
+        public delegate void UpdateTBEventHandler(TextBox TBL, string status);
         //更新指定控件方法
-        public void TBLUpdateStatus(TextBox TBL, string status)
+        public void TBUpdateStatus(TextBox TBL, string status)
         {
             TBL.Text = status;
         }
@@ -123,7 +125,6 @@ namespace PCI
         WaveProcesser waveProcesser = new WaveProcesser();
 
         //波形数组——从0-3按序依次代表通道1-4
-        Waveform[] WaveList = new Waveform[4];
         ushort[] CH5;//测试备用
 
         //零点波形——存放零点信息
@@ -159,6 +160,7 @@ namespace PCI
 
         Oscillocope osc;
         ExcelReadNWrite ERNW;
+        TestClass testClass = new TestClass();
 
         #endregion
 
@@ -166,9 +168,10 @@ namespace PCI
         //滤波权重
         public int MeanFilteWeight = 20;
         public int MedianFilteWeight = 20;
-        public int DownsampleWeight = 100;
+        public int DownSampleWeight = 100;
         //波形采集线程
         Thread ThreadCollectWave;
+        Thread ThreadStaticAngleMeasure;
 
         /// <summary>
         /// 从采集卡获取波形
@@ -180,96 +183,14 @@ namespace PCI
             //根据采集次数设置循环次数
             for (int times = 0; times < SamplingTimes; times++)
             {
-                //初始化四个数组
-                Waveform CH1 = new Waveform(1d / 10000000d, 0, "Origin");
-                Waveform CH2 = new Waveform(1d / 10000000d, 0, "Origin");
-                Waveform CH3 = new Waveform(1d / 10000000d, 0, "Origin");
-                Waveform CH4 = new Waveform(1d / 10000000d, 0, "Origin");
-                TargetWave = new Waveform(1d / 10000000d, 0, "Origin");
-                //将四个波形数组代入波形数组List
-                WaveList[0] = CH1;
-                WaveList[1] = CH2;
-                WaveList[2] = CH3;
-                WaveList[3] = CH4;
+                Waveform[] waveList = osc.ReadWave((ulong)osc.m_nScnt);
 
-                //计算实际采集长度
-                ulong sicnt = (ulong)osc.m_nScnt * 10000;                                                                            //每个通道采集的点数
+                testClass.OutputFile(waveList[0], "CH1Protype");
+                testClass.OutputFile(waveList[1], "CH2Protype");
 
-                sicnt *= (ulong)osc.para_init.lChCnt;                                                                           //每个通道采集的样点
-
-                //由于读取函数有最大读取要求，分多次读取数据
-                int read_cnt = 0;
-                ulong read_len = 0;
-                bool isdivisible = false;
-                if ((sicnt % Constants.READ_MAX_LENGTH) == 0)//如果读取的长度，刚好是最大允许读取长度的整数倍
-                {
-                    read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH);
-                    isdivisible = true;
-                }
-                else
-                {
-                    read_cnt = (int)(sicnt / Constants.READ_MAX_LENGTH) + 1;
-                }
-
-                for (int i = 0; i < read_cnt; i++)
-                {
-                    if (i == (read_cnt - 1))
-                    {
-                        if (isdivisible)
-                        {
-                            read_len = Constants.READ_MAX_LENGTH;
-                        }
-                        else
-                        {
-                            read_len = sicnt % Constants.READ_MAX_LENGTH;
-                        }
-                    }
-                    else
-                    {
-                        read_len = Constants.READ_MAX_LENGTH;
-                    }
-
-                    ushort[] inBuffer = new ushort[read_len];   //分配内存
-
-                    //等待缓存钟数据量达到要求
-                    osc.bufcnt = DllImport.PCI2168_GetBufCnt(osc.hdl);
-                    //Thread.Sleep(50);
-                    while (osc.bufcnt < (int)read_len)
-                    {
-                        osc.bufcnt = DllImport.PCI2168_GetBufCnt(osc.hdl);
-                        Thread.Sleep(20);
-                    }
-                    Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "缓存钟数据长度：" + osc.bufcnt + "\n 期望读取长度：" + read_len + "\n总长度：" + sicnt + "\n采集次数：" + read_cnt });
-
-                    ulong bBufOver = 0;
-                    if (DllImport.PCI2168_ReadAD(osc.hdl, inBuffer, read_len, ref bBufOver))
-                    {
-                        int SingleChLength = (int)((long)read_len / osc.para_init.lChCnt) - 1;
-
-                        for (int n = 0; n < SingleChLength; n++)
-                        {
-                            //V1[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n]-32768;
-                            //V2[n + (int)Constants.READ_MAX_LENGTH / 2 * i] = inBuffer[para_init.lChCnt * n + 1]-32768;
-                            //V1[n + (int)Constants.READ_MAX_LENGTH / para_init.lChCnt * i] = inBuffer[para_init.lChCnt * n];
-                            for (int m = 0; m < osc.para_init.lChCnt; m++)
-                            {
-                                WaveList[m].Add(inBuffer[osc.para_init.lChCnt * n + m]);
-                            }
-                        }
-                        CH5 = inBuffer;
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-
-                OutputFile(CH1, "CH1Protype");
-                OutputFile(CH2, "CH2Protype");
-
-                TargetWave = ProcessWave(CH1, CH2);
+                TargetWave = waveProcesser.ProcessWave(waveList[0], waveList[1], DownSampleWeight, MedianFilteWeight, MeanFilteWeight);
                 //Waveform TargetStandardZeroWave = ProcessWave(CH3);
-                OutputFile(TargetWave, "TargetName");
+                testClass.OutputFile(TargetWave, "TargetName");
 
                 //计算零点属性
                 ZeroPropertyWave = waveProcesser.CalculateZero(TargetWave);
@@ -290,7 +211,7 @@ namespace PCI
                 LinearWave = new List<int>();
                 LinearArray = new List<int>();
                 string Linear = (string)TBLinear.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBLinear);
-                //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), new object[] { "线性度为" + TBLinear });
+                //Status.Dispatcher.Invoke(new UpdateEventHandler(StatusUpdate), new object[] { "线性度为" + TBLinear });
                 double linear = double.Parse(Linear);
                 LinearArray = waveProcesser.CalculateLinearArea(DerivatedWave, linear);
 
@@ -308,16 +229,16 @@ namespace PCI
                 // 频率 角度 速度 时间利用率 时间
                 ListProperty = waveProcesser.CalculateProperties(Zero, LinearArray, TargetWave, DerivatedWave);
 
-                OutputFile(ListProperty[0], "Frequency");
-                OutputFile(ListProperty[1], "Angle");
-                OutputFile(ListProperty[2], "Speed");
-                OutputFile(ListProperty[3], "TimeU");
-                OutputFile(ListProperty[4], "Time");
+                testClass.OutputFile(ListProperty[0], "Frequency");
+                testClass.OutputFile(ListProperty[1], "Angle");
+                testClass.OutputFile(ListProperty[2], "Speed");
+                testClass.OutputFile(ListProperty[3], "TimeU");
+                testClass.OutputFile(ListProperty[4], "Time");
 
-                ScanFrequency = ListProperty[0].Sum() / ListProperty[0].Count;
-                EffectiveAngle = ListProperty[1].Sum() / ListProperty[1].Count;
-                SpeedUniformity = ListProperty[2].Sum() / ListProperty[2].Count;
-                TimeUtilization = ListProperty[3].Sum() / ListProperty[3].Count;
+                ScanFrequency = Math.Round(ListProperty[0].Sum() / ListProperty[0].Count);
+                EffectiveAngle = Math.Round(ListProperty[1].Sum() / ListProperty[1].Count);
+                SpeedUniformity = Math.Round(ListProperty[2].Sum() / ListProperty[2].Count);
+                TimeUtilization = Math.Round(ListProperty[3].Sum() / ListProperty[3].Count);
 
                 ScanFrequencyList = ListProperty[0];
                 EffectiveAngleList = ListProperty[1];
@@ -325,42 +246,12 @@ namespace PCI
                 TimeUtilizationList = ListProperty[3];
                 List<double> TimeList = ListProperty[4];
 
-                //#region 对导数部分处理
-                //#region 计算零点和周期
-                //List<double> periodArray = new List<double>();
-                //if (Zero.Length != 0)
-                //{
-                //    for (int i = 0; i < Zero.Length; i++)
-                //    {
-                //        if (Zero[i]._value == 1)
-                //        {
-                //            periodArray.Add(i);
-                //        }
-                //    }
-                //}
 
-                //OutputFile(periodArray,"periodArray");
-
-                //ListFrequency=new List<double>();
-
-                //double PeriodSum = 0;
-                //double PeriodTime = 0;
-                //for (int i = 2; i < periodArray.Count; i+=2)
-                //{
-                //    PeriodSum += (periodArray[i] - periodArray[i - 2]);
-                //    ListFrequency.Add(1 / ((periodArray[i] - periodArray[i - 2]) * Zero.TimeSpan));
-                //    PeriodTime++;
-                //}
-                //SacnFrequency = 1 / (PeriodSum / (PeriodTime) * Zero.TimeSpan);
-
-                //#endregion
-                //#endregion
-
-                TBLZero.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLZero, ZeroProperty.ToString() });
-                TBLScanFreq.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLScanFreq, ScanFrequency.ToString("N2") + "Hz" });
-                TBLTimeUtilization.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLTimeUtilization, TimeUtilization.ToString("N2") });
-                TBLEffectiveAngle.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLEffectiveAngle, EffectiveAngle.ToString("N2") });
-                TBLSpeedUniformity.Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TBLSpeedUniformity, SpeedUniformity.ToString("N2") });
+                TBLZero.Dispatcher.Invoke(new UpdateTBEventHandler(TBUpdateStatus), new object[] { TBLZero, ZeroProperty.ToString() });
+                TBLScanFreq.Dispatcher.Invoke(new UpdateTBEventHandler(TBUpdateStatus), new object[] { TBLScanFreq, ScanFrequency.ToString("N2") + "Hz" });
+                TBLTimeUtilization.Dispatcher.Invoke(new UpdateTBEventHandler(TBUpdateStatus), new object[] { TBLTimeUtilization, TimeUtilization.ToString("N2") });
+                TBLEffectiveAngle.Dispatcher.Invoke(new UpdateTBEventHandler(TBUpdateStatus), new object[] { TBLEffectiveAngle, EffectiveAngle.ToString("N2") });
+                TBLSpeedUniformity.Dispatcher.Invoke(new UpdateTBEventHandler(TBUpdateStatus), new object[] { TBLSpeedUniformity, SpeedUniformity.ToString("N2") });
 
                 //OutputFile(TargetWave, "TargetWave");
                 //OutputFile(DerivatedWave, "DerivatedWave");
@@ -386,9 +277,9 @@ namespace PCI
 
                 string ProductNum = (string)TBProducerNum.Dispatcher.Invoke(new GetTBLStatus(getTBLStatus), TBProducerNum);
 
-                ERNW.SaveExcel(ProductNum,TargetWave, FilePath, StandardZeroList, ZeroPropertyList, ScanFrequencyList, EffectiveAngleList, TimeUtilizationList, TimeList, SpeedUniformityList);
+                ERNW.SaveExcel(ProductNum, TargetWave, FilePath, StandardZeroList, ZeroPropertyList, ScanFrequencyList, EffectiveAngleList, TimeUtilizationList, TimeList, SpeedUniformityList);
 
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "第" + (times + 1) + "次采集完成！\n" + "频率为" + ScanFrequency.ToString() });
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "第" + (times + 1) + "次采集完成！\n" + "频率为" + ScanFrequency.ToString() });
                 if (SamplingTimes != 1)
                 {
                     //时间间隔
@@ -627,64 +518,6 @@ namespace PCI
         #endregion
 
         #endregion
-        #endregion
-
-        #region 波形处理部分
-        /// <summary>
-        /// 通过输入CH1和CH2的波形，处理出原始波形并计算出目标波形
-        /// </summary>
-        /// <param name="OriginWaveCH1"></param>
-        /// <param name="OriginWaveCH2"></param>
-        /// <returns></returns>
-        public Waveform ProcessWave(Waveform OriginWaveCH1, Waveform OriginWaveCH2)
-        {
-            Waveform TargetWave = new Waveform();
-            //整体降采样
-            Waveform CH11 = waveProcesser.DownSampling(OriginWaveCH1, DownsampleWeight);
-            Waveform CH21 = waveProcesser.DownSampling(OriginWaveCH2, DownsampleWeight);
-
-            CH11 = waveProcesser.TranslateWaveform(CH11, "CH1");
-            CH21 = waveProcesser.TranslateWaveform(CH21, "CH2");
-
-            OutputFile(CH11, "CH1");
-            OutputFile(CH21, "CH2");
-            #region 对原始波形处理部分
-
-            //计算角度变化波形
-            TargetWave = waveProcesser.Calculate(CH21, CH11);
-
-
-            //中值滤波
-            TargetWave = waveProcesser.MedianFilter(TargetWave, MedianFilteWeight);
-
-
-            //均值滤波
-            TargetWave = waveProcesser.MeanFilter(TargetWave, MeanFilteWeight);
-
-
-            return TargetWave;
-            #endregion
-        }
-
-        /// <summary>
-        /// 通过输入原始波形，计算出目标波形
-        /// </summary>
-        /// <param name="OriginWaveCH1"></param>
-        /// <returns></returns>
-        public Waveform ProcessWave(Waveform OriginWaveCH1)
-        {
-            Waveform TargetWave = new Waveform(OriginWaveCH1.TimeSpan, OriginWaveCH1.StartTime, OriginWaveCH1.Type);
-            #region 对原始波形处理部分
-            //整体降采样
-            TargetWave = waveProcesser.DownSampling(OriginWaveCH1, DownsampleWeight);
-            //中值滤波
-            TargetWave = waveProcesser.MedianFilter(TargetWave, MedianFilteWeight);
-            //均值滤波
-            TargetWave = waveProcesser.MeanFilter(TargetWave, MeanFilteWeight);
-
-            return TargetWave;
-            #endregion
-        }
         #endregion
 
         #region 表格保存
@@ -931,7 +764,7 @@ namespace PCI
         //    }
         //    #endregion
 
-        //    Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), FilePath);
+        //    Status.Dispatcher.Invoke(new UpdateEventHandler(StatusUpdate), FilePath);
         //    string ExcelPath = System.IO.Path.Combine(FilePath, NowDay);
         //    if (!Directory.Exists(ExcelPath))
         //    {
@@ -1012,7 +845,7 @@ namespace PCI
                     for (int i = 0; i < DataPropertyArray.Length; i++)
                     {
                         DataPropertyList[i] = ERNW.ReadExcelData(workBook, (DataProperty)DataPropertyArray.GetValue(i));
-                        TextBoxList[i].Dispatcher.Invoke(new UpdateTBLEventHandler(TBLUpdateStatus), new object[] { TextBoxList[i], DataPropertyList[i].ToString("N2") });
+                        TextBoxList[i].Dispatcher.Invoke(new UpdateTBEventHandler(TBUpdateStatus), new object[] { TextBoxList[i], DataPropertyList[i].ToString("N2") });
                     }
                 }
                 catch (Exception ex)
@@ -1023,7 +856,7 @@ namespace PCI
             }
             else
             {
-                Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), "操作取消！");
+                Status.Dispatcher.Invoke(new UpdateEventHandler(StatusUpdate), "操作取消！");
             }
         }
         #endregion
@@ -1047,7 +880,7 @@ namespace PCI
                     dialog.ShowDialog();
                     if (dialog.SelectedPath == string.Empty)
                     {
-                        Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "采集失败，路径为空！" });
+                        Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "采集失败，路径为空！" });
                         e.Handled = true;
                         return;
                     }
@@ -1058,7 +891,7 @@ namespace PCI
                 }
                 ThreadCollectWave = new Thread(WaveCollect);
                 ThreadCollectWave.Start();
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "采集开始！" });
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "采集开始！" });
             }
             else
             {
@@ -1077,7 +910,7 @@ namespace PCI
             if (ThreadCollectWave.ThreadState == ThreadState.Running)
             {
                 ThreadCollectWave.Abort();
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), new object[] { "采集已停止。" });
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "采集已停止。" });
             }
         }
 
@@ -1138,7 +971,7 @@ namespace PCI
             catch (Exception ex)
             {
                 TBSingleTime.Text = osc.m_nScnt.ToString();
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StutusUpdate), e.ToString());
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), e.ToString());
             }
         }
         #endregion
@@ -1178,7 +1011,7 @@ namespace PCI
             catch (Exception)
             {
                 TBTimeSpan.Text = CollectTimeSpan.ToString();
-                //Status.Dispatcher.Invoke(new UpdateEventHandler(StutusUpdate), e.ToString());
+                //Status.Dispatcher.Invoke(new UpdateEventHandler(StatusUpdate), e.ToString());
             }
         }
         #endregion
@@ -1223,79 +1056,49 @@ namespace PCI
         }
         #endregion
 
+
         /// <summary>
-        /// 测试用方法——将波形以txt文件输出默认D盘根目录
+        /// 静止角检测
         /// </summary>
-        /// <param name="OutputArray"></param>
-        /// <param name="Name"></param>
-        #region
-        public void OutputFile(Waveform OutputArray, string Name)
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void ButtonStaticAngleMeasure_Click(object sender, RoutedEventArgs e)
         {
-            string path = @"D:\" + Name + ".txt";
-            FileStream fs = new FileStream(path, FileMode.Create);
-            StreamWriter sw = new StreamWriter(fs);
-            //开始写入
-            for (int i = 0; i < OutputArray.Length; i++)
+            if (ThreadStaticAngleMeasure.ThreadState == ThreadState.Unstarted || ThreadStaticAngleMeasure.ThreadState == ThreadState.Stopped || ThreadStaticAngleMeasure.ThreadState == ThreadState.Aborted)
             {
-                sw.Write(OutputArray[i]._value + "\t");
+                ThreadStaticAngleMeasure = new Thread(StaticAngleMeasure);
+                ThreadStaticAngleMeasure.Start();
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "测量开始！" });
             }
-            //清空缓冲区
-            sw.Flush();
-            //关闭流
-            sw.Close();
-            fs.Close();
+            else
+            {
+                e.Handled = true;
+            }
         }
 
-        public void OutputFile(List<int> OutputArray, string Name)
+        /// <summary>
+        /// 静止角的采集方法
+        /// </summary>
+        public void StaticAngleMeasure()
         {
-            string path = @"D:\" + Name + ".txt";
-            FileStream fs = new FileStream(path, FileMode.Create);
-            StreamWriter sw = new StreamWriter(fs);
-            //开始写入
-            for (int i = 0; i < OutputArray.Count; i++)
-            {
-                sw.Write(OutputArray[i] + "\t");
-            }
-            //清空缓冲区
-            sw.Flush();
-            //关闭流
-            sw.Close();
-            fs.Close();
-        }
+            osc.InitClock();
 
-        public void OutputFile(List<double> OutputArray, string Name)
-        {
-            string path = @"D:\" + Name + ".txt";
-            FileStream fs = new FileStream(path, FileMode.Create);
-            StreamWriter sw = new StreamWriter(fs);
-            //开始写入
-            for (int i = 0; i < OutputArray.Count; i++)
-            {
-                sw.Write(OutputArray[i] + "\t");
-            }
-            //清空缓冲区
-            sw.Flush();
-            //关闭流
-            sw.Close();
-            fs.Close();
-        }
+            Waveform[] waveList = osc.ReadWave(100);
 
-        public void OutputFile(PointCollection OutputArray, string Name)
-        {
-            string path = @"D:\" + Name + ".txt";
-            FileStream fs = new FileStream(path, FileMode.Create);
-            StreamWriter sw = new StreamWriter(fs);
-            //开始写入
-            for (int i = 0; i < OutputArray.Count; i++)
-            {
-                sw.Write(OutputArray[i].Y + "\t");
-            }
-            //清空缓冲区
-            sw.Flush();
-            //关闭流
-            sw.Close();
-            fs.Close();
+            testClass.OutputFile(waveList[0], "CH1");
+            testClass.OutputFile(waveList[1], "CH2");
+
+            Waveform AngleWave = waveProcesser.ProcessWave(waveList[0],waveList[1],DownSampleWeight,MeanFilteWeight,MeanFilteWeight);
+
+            testClass.OutputFile(AngleWave, "TargetWave");
+
+            double staticAangle = AngleWave.Average();
+            //double staticAangle = 0;
+
+            TBStaticAngle.Dispatcher.BeginInvoke(new UpdateTBEventHandler(TBUpdateStatus) ,new object[] { TBStaticAngle, staticAangle.ToString("N2") });
+
+            Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "检测完成！" });
+
         }
-        #endregion
     }
 }
