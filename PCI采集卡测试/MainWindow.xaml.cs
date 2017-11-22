@@ -289,6 +289,52 @@ namespace PCI
         }
         #endregion
 
+        #region 静止角检测
+        /// <summary>
+        /// 静止角检测
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void ButtonStaticAngleMeasure_Click(object sender, RoutedEventArgs e)
+        {
+            if (ThreadStaticAngleMeasure.ThreadState == ThreadState.Unstarted || ThreadStaticAngleMeasure.ThreadState == ThreadState.Stopped || ThreadStaticAngleMeasure.ThreadState == ThreadState.Aborted)
+            {
+                ThreadStaticAngleMeasure = new Thread(StaticAngleMeasure);
+                ThreadStaticAngleMeasure.Start();
+                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "测量开始！" });
+            }
+            else
+            {
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// 静止角的采集方法
+        /// </summary>
+        public void StaticAngleMeasure()
+        {
+            osc.InitClock();
+
+            Waveform[] waveList = osc.ReadWave(100);
+
+            testClass.OutputFile(waveList[0], "CH1");
+            testClass.OutputFile(waveList[1], "CH2");
+
+            Waveform AngleWave = waveProcesser.ProcessWave(waveList[0], waveList[1], DownSampleWeight, MeanFilteWeight, MeanFilteWeight);
+
+            testClass.OutputFile(AngleWave, "TargetWave");
+
+            double staticAangle = AngleWave.Average();
+            //double staticAangle = 0;
+
+            TBStaticAngle.Dispatcher.BeginInvoke(new UpdateTBEventHandler(TBUpdateStatus), new object[] { TBStaticAngle, staticAangle.ToString("N2") });
+
+            Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "检测完成！" });
+
+        }
+        #endregion 
+
         #region 波形绘制
         //当前正在绘制的波形
         Waveform DrawingWave;
@@ -1055,50 +1101,5 @@ namespace PCI
             }
         }
         #endregion
-
-
-        /// <summary>
-        /// 静止角检测
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void ButtonStaticAngleMeasure_Click(object sender, RoutedEventArgs e)
-        {
-            if (ThreadStaticAngleMeasure.ThreadState == ThreadState.Unstarted || ThreadStaticAngleMeasure.ThreadState == ThreadState.Stopped || ThreadStaticAngleMeasure.ThreadState == ThreadState.Aborted)
-            {
-                ThreadStaticAngleMeasure = new Thread(StaticAngleMeasure);
-                ThreadStaticAngleMeasure.Start();
-                Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "测量开始！" });
-            }
-            else
-            {
-                e.Handled = true;
-            }
-        }
-
-        /// <summary>
-        /// 静止角的采集方法
-        /// </summary>
-        public void StaticAngleMeasure()
-        {
-            osc.InitClock();
-
-            Waveform[] waveList = osc.ReadWave(100);
-
-            testClass.OutputFile(waveList[0], "CH1");
-            testClass.OutputFile(waveList[1], "CH2");
-
-            Waveform AngleWave = waveProcesser.ProcessWave(waveList[0],waveList[1],DownSampleWeight,MeanFilteWeight,MeanFilteWeight);
-
-            testClass.OutputFile(AngleWave, "TargetWave");
-
-            double staticAangle = AngleWave.Average();
-            //double staticAangle = 0;
-
-            TBStaticAngle.Dispatcher.BeginInvoke(new UpdateTBEventHandler(TBUpdateStatus) ,new object[] { TBStaticAngle, staticAangle.ToString("N2") });
-
-            Status.Dispatcher.BeginInvoke(new UpdateEventHandler(StatusUpdate), new object[] { "检测完成！" });
-
-        }
     }
 }

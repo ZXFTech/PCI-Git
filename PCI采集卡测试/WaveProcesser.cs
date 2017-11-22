@@ -169,6 +169,7 @@ namespace PCI
             Waveform OutputWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime, InputWave.Type);
 
             Waveform CacheWave = new Waveform(InputWave.TimeSpan * Weight, InputWave.StartTime);
+
             for (int i = 0; i < InputWave.Length / Weight - 1; i++)
             {
                 CacheWave = InputWave.GetRange(i * Weight, Weight);
@@ -307,11 +308,11 @@ namespace PCI
 
             //double rate = 3.303 / 5.667 * 17 / 63;
 
-            //double rate = 1d / 3d * 17 / 63;
+            double rate = 1d / 3d * 17 / 63;
 
             for (int i = 0; i < differenceWave.Length; i++)
             {
-                OutputWave.Add(Math.Atan((differenceWave[i] / sumWave[i])._value));
+                OutputWave.Add(Math.Atan((differenceWave[i] / sumWave[i])._value*rate));
             }
             
             //OutputWave = differenceWave / sumWave;
@@ -557,10 +558,12 @@ namespace PCI
             //计算角度变化波形
             TargetWave = Calculate(CH11, CH21);
 
+            testClass.OutputFile(TargetWave, "TargetWave-C");
 
             //中值滤波
             TargetWave = MedianFilter(TargetWave, MedianFilteWeight);
 
+            testClass.OutputFile(TargetWave, "Medianed-C");
 
             //均值滤波
             TargetWave = MeanFilter(TargetWave, MeanFilteWeight);
