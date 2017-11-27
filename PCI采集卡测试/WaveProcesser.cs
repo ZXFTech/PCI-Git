@@ -308,13 +308,13 @@ namespace PCI
 
             //double rate = 3.303 / 5.667 * 17 / 63;
 
-            double rate = 1d / 3d * 17 / 63;
+            double rate = 0.1 / Math.PI * 180.0;      //  1.75/17.5
 
             for (int i = 0; i < differenceWave.Length; i++)
             {
-                OutputWave.Add(Math.Atan((differenceWave[i] / sumWave[i])._value*rate));
+                OutputWave.Add(Math.Atan(differenceWave[i]._value / sumWave[i]._value) * rate);
             }
-            
+
             //OutputWave = differenceWave / sumWave;
 
             return OutputWave;
@@ -444,7 +444,7 @@ namespace PCI
                 case "CH2":
                     for (int i = 0; i < inputWave.Length; i++)
                     {
-                        outputWave.Add(new NullableValue((inputWave[i]._value - 32768) * 3));
+                        outputWave.Add(new NullableValue(inputWave[i]._value - 32768));
                     }
                     return outputWave;
                 default:

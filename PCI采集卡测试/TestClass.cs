@@ -10,7 +10,7 @@ namespace PCI
 {
     public class TestClass
     {
-        #region 侧使用方法
+        #region 测试用方法
         /// <summary>
         /// 测试用方法——将波形以txt文件输出默认D盘根目录
         /// </summary>

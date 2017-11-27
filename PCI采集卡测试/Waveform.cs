@@ -8,7 +8,7 @@ using System.Windows.Media;
 
 namespace PCI
 {
-    public class Waveform : List<double>
+    public class Waveform:List<double>
     {
         #region 构造函数
         public Waveform()
@@ -52,6 +52,11 @@ namespace PCI
             return this.WaveArray.Min();
         }
 
+        /// <summary>
+        /// 检查double索引是否包含此索引，如果包含则返回对应的index，如果不包含，则返回数字值null
+        /// </summary>
+        /// <param name="X"></param>
+        /// <returns></returns>
         public NullableValue CheckX(double X)
         {
             decimal index;
@@ -63,33 +68,51 @@ namespace PCI
         }
 
         /// <summary>
-        /// 在源波形上创建元素范围的新波形
+        /// 当index值为int类型时，在源波形上创建指定元素范围的新波形
         /// </summary>
         /// <param name="index"></param>
         /// <param name="count"></param>
         /// <returns></returns>
-        public Waveform GetRange(object index, int count)
+        public new Waveform GetRange(int index, int count)
         {
-            switch (index.GetType().Name)
-            {
-                case "Double":
-                    NullableValue output = CheckX((double)index);
-                    if (output._null)
-                    {
-                        return null;
-                    }
-                    return new Waveform(this.WaveArray.GetRange((int)output._value, count), this.TimeSpan, this.StartTime + (double)index);
-                case "Int32":
-                    return new Waveform(this.WaveArray.GetRange((int)index, count));
-                default:
-                    return null;
-            }
-
+            Waveform OutputWaveform = this;
+            OutputWaveform.WaveArray = this.WaveArray.GetRange(index, count);
+            return OutputWaveform;
         }
 
+        /// <summary>
+        /// 当index值为double类型式，认为以波形时间点为起点，在源波形上创建指定元素范围的新波形
+        /// </summary>
+        /// <param name="index"></param>
+        /// <param name="count"></param>
+        /// <returns></returns>
+        public Waveform GetRange(double index, int count)
+        {
+            NullableValue output = CheckX(index);   //查找是否存在该时间点，如果存在则返回指定索引，如果不存在则返回数字值null
+            if (output._null)
+            {
+                return null;
+            }
+            Waveform OutputWaveform = this;
+            OutputWaveform.WaveArray = this.WaveArray.GetRange((int)output._value, count);
+            return OutputWaveform;
+        }
+
+        /// <summary>
+        /// 波形Y值求和
+        /// </summary>
+        /// <returns></returns>
         public double Sum()
         {
             return this.WaveArray.Sum();
+        }
+
+        /// <summary>
+        /// 波形Y值排序（从小到大）
+        /// </summary>
+        public void Sort()
+        {
+            this.WaveArray.Sort();
         }
 
         /// <summary>
@@ -307,7 +330,7 @@ namespace PCI
 
         #region 其他相关属性
         /// <summary>
-        /// 可空值类型
+        /// 自定义类型 数字值
         /// </summary>
         public struct NullableValue
         {

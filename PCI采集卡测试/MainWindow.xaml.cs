@@ -264,7 +264,7 @@ namespace PCI
                 {
                     DrawingWave = DerivatedWave;
                 }
-                UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
+                //UI.Dispatcher.BeginInvoke(new DrawWaves(MethodDrawWaves), DrawingWave);
 
                 List<double> StandardZeroList = new List<double>();
                 List<double> ZeroPropertyList = new List<double>();
@@ -318,8 +318,8 @@ namespace PCI
 
             Waveform[] waveList = osc.ReadWave(100);
 
-            testClass.OutputFile(waveList[0], "CH1");
-            testClass.OutputFile(waveList[1], "CH2");
+            testClass.OutputFile(waveList[0], "CH1Protype");
+            testClass.OutputFile(waveList[1], "CH2Protype");
 
             Waveform AngleWave = waveProcesser.ProcessWave(waveList[0], waveList[1], DownSampleWeight, MeanFilteWeight, MeanFilteWeight);
 
@@ -347,75 +347,79 @@ namespace PCI
         //绘制波形 新方法
         public void MethodDrawWaves(Waveform Vwave)
         {
-            if (Vwave != null && Vwave.Length != 0)
+            if (false)
             {
-
-                double TopRange = 0;
-
-                //清空之前的数据
-                Points.Clear();
-
-                //点容器
-                Point point;
-                //获得画布的尺寸
-                double height = UI.ActualHeight;
-                double width = UI.ActualWidth;
-
-                double WaveRange = (Vwave.Max() - Vwave.Min()) / 2 + Vwave.Min();
-
-                NullableValue RangeValue = new NullableValue(WaveRange);
-                for (int i = 0; i < Vwave.Length; i++)
+                if (Vwave != null && Vwave.Length != 0)
                 {
-                    Vwave[i] = Vwave[i] - RangeValue;
-                }
 
-                double digit = Math.Floor(Math.Log10(Vwave.Max()));
+                    double TopRange = 0;
 
-                double digitnum = Vwave.Max() / Math.Pow(10, digit);
+                    //清空之前的数据
+                    Points.Clear();
 
-                double mid = Math.Floor(digitnum);
+                    //点容器
+                    Point point;
+                    //获得画布的尺寸
+                    double height = UI.ActualHeight;
+                    double width = UI.ActualWidth;
 
-                if (digitnum > (mid + 0.5))
-                {
-                    TopRange = (mid + 1) * Math.Pow(10, digit);
-                }
-                else
-                {
-                    TopRange = (mid + 1) * Math.Pow(10, digit) - Math.Pow(10, digit) * 0.5;
-                }
+                    double WaveRange = (Vwave.Max() - Vwave.Min()) / 2 + Vwave.Min();
 
-                double heightPercentage = height / 2 / TopRange;
-                double widthPencentage = Vwave.Length / width;
-
-                List<int> TargetLinearList = new List<int>();
-                double m = 0;
-                for (int i = 0; i < width; i++)
-                {
-                    double TargetY = height / 2 - Vwave[(int)Math.Floor(m)]._value * heightPercentage;
-
-                    if (m < DerivatedWave.Length)
+                    NullableValue RangeValue = new NullableValue(WaveRange);
+                    for (int i = 0; i < Vwave.Length; i++)
                     {
-                        TargetLinearList.Add(LinearArray[(int)Math.Floor(m)]);
+                        Vwave[i] = Vwave[i] - RangeValue;
                     }
 
-                    m += widthPencentage;
+                    double digit = Math.Floor(Math.Log10(Vwave.Max()));
 
-                    Points.Add(new Point(i, TargetY));
+                    double digitnum = Vwave.Max() / Math.Pow(10, digit);
+
+                    double mid = Math.Floor(digitnum);
+
+                    if (digitnum > (mid + 0.5))
+                    {
+                        TopRange = (mid + 1) * Math.Pow(10, digit);
+                    }
+                    else
+                    {
+                        TopRange = (mid + 1) * Math.Pow(10, digit) - Math.Pow(10, digit) * 0.5;
+                    }
+
+                    double heightPercentage = height / 2 / TopRange;
+                    double widthPencentage = Vwave.Length / width;
+
+                    List<int> TargetLinearList = new List<int>();
+                    double m = 0;
+                    for (int i = 0; i < width; i++)
+                    {
+                        double TargetY = height / 2 - Vwave[(int)Math.Floor(m)]._value * heightPercentage;
+
+                        if (m < DerivatedWave.Length)
+                        {
+                            TargetLinearList.Add(LinearArray[(int)Math.Floor(m)]);
+                        }
+
+                        m += widthPencentage;
+
+                        Points.Add(new Point(i, TargetY));
+                    }
+
+                    //OutputFile(LinearWave, "LinearWave");
+                    //OutputFile(LinearArray, "LinearArray");
+                    //OutputFile(Points1, "PointYArray");
+
+
+                    //wave1.Points = Points1;
+                    //UI.Children.Clear();
+                    //UI.Children.Add(wave1);
+                    if (UI.visualChildrenCount > 0)
+                        UI.RemoveVisual(UI.getVisualChild(0));
+                    UI.AddVisual(DrawPolyline(Points, TargetLinearList, new SolidColorBrush(Color.FromRgb(89, 255, 91)), 1));
+
+                    //int ActualLong=CBIndexToWidthPoints(CBXAxis.SelectedIndex
                 }
 
-                //OutputFile(LinearWave, "LinearWave");
-                //OutputFile(LinearArray, "LinearArray");
-                //OutputFile(Points1, "PointYArray");
-
-
-                //wave1.Points = Points1;
-                //UI.Children.Clear();
-                //UI.Children.Add(wave1);
-                if (UI.visualChildrenCount > 0)
-                    UI.RemoveVisual(UI.getVisualChild(0));
-                UI.AddVisual(DrawPolyline(Points, TargetLinearList, new SolidColorBrush(Color.FromRgb(89, 255, 91)), 1));
-
-                //int ActualLong=CBIndexToWidthPoints(CBXAxis.SelectedIndex
             }
         }
 
